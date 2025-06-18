@@ -1,12 +1,139 @@
-{
-  "name": "emdr-remote",
-  "version": "1.0.0",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "socket.io": "^4.6.1"
-  }
-}
+// フォルダ構成：
+// - project/
+//   - server.js
+//   - public/
+//     - therapist.html
+//     - client.html
+//     - script.js
+
+// =============================
+// Step 1: Node.js + Socket.IO サーバーコード (server.js)
+// =============================
+
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
+app.use(express.static('public'));
+
+io.on('connection', (socket) => {
+  console.log('A user connected:', socket.id);
+
+  // セラピストからの操作をクライエントに送信
+  socket.on('control', (data) => {
+    socket.broadcast.emit('control', data);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('User disconnected:', socket.id);
+  });
+});
+
+const PORT = 3000;
+server.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
+});
+
+// =============================
+// Step 2: public/therapist.html
+// =============================
+
+/*
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>セラピスト画面</title>
+</head>
+<body>
+  <h1>セラピスト操作画面</h1>
+  <label for="speed">スピード：</label>
+  <input type="range" id="speed" min="1" max="10" value="5">
+  <br><br>
+  <button id="startBtn">スタート</button>
+  <button id="stopBtn">ストップ</button>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const speedSlider = document.getElementById('speed');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+
+    speedSlider.addEventListener('input', () => {
+      socket.emit('control', { speed: speedSlider.value });
+    });
+
+    startBtn.addEventListener('click', () => {
+      socket.emit('control', { command: 'start' });
+    });
+
+    stopBtn.addEventListener('click', () => {
+      socket.emit('control', { command: 'stop' });
+    });
+  </script>
+</body>
+</html>
+*/
+
+// =============================
+// Step 3: public/client.html
+// =============================
+
+/*
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>クライエント画面</title>
+  <style>
+    body { display: flex; flex-direction: column; align-items: center; }
+    .container {
+      position: relative; width: 80%; height: 100px; border-bottom: 2px solid #ccc;
+    }
+    .ball {
+      width: 30px; height: 30px; background: blue; border-radius: 50%; position: absolute;
+      top: 35px; left: 0;
+    }
+  </style>
+</head>
+<body>
+  <h2>クライエント画面</h2>
+  <div class="container">
+    <div class="ball" id="ball"></div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const ball = document.getElementById('ball');
+    let pos = 0;
+    let dir = 1;
+    let speed = 5;
+    let running = true;
+
+    function animate() {
+      if (running) {
+        const max = document.querySelector('.container').clientWidth - 30;
+        pos += dir * speed;
+        if (pos >= max || pos <= 0) dir *= -1;
+        ball.style.left = pos + 'px';
+      }
+      requestAnimationFrame(animate);
+    }
+
+    socket.on('control', (data) => {
+      if (data.speed) speed = parseInt(data.speed);
+      if (data.command === 'start') running = true;
+      if (data.command === 'stop') running = false;
+    });
+
+    animate();
+  </script>
+</body>
+</html>
+*/
