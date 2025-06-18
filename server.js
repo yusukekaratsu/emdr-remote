@@ -1,61 +1,42 @@
 const express = require("express");
 const http = require("http");
 const socketIO = require("socket.io");
-
-const app = express();
-const server = http.createServer(app);
-const io = socketIO(server);
-
-const PORT = process.env.PORT || 3000; // ← Render用にPORT環境変数を使う
-
-app.use(express.static("public"));
-
-io.on("connection", (socket) => {
-  console.log("a user connected");
-
-  socket.on("ball-control", (data) => {
-    socket.broadcast.emit("ball-control", data);
-  });
-
-  socket.on("disconnect", () => {
-    console.log("user disconnected");
-  });
-});
-
-server.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
-
-const express = require("express");
-const http = require("http");
-const socketIO = require("socket.io");
 const path = require("path");
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
 
+// Renderで必要：環境変数 PORT を使う
 const PORT = process.env.PORT || 3000;
 
-// 🔽 静的ファイルを公開するフォルダ（public）を指定
+// 静的ファイル（publicフォルダ）を公開
 app.use(express.static(path.join(__dirname, "public")));
 
-io.on("connection", (socket) => {
-  console.log("a user connected");
+// ルートアクセスでクライエント画面にリダイレクト
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "public-client.html"));
+});
 
+// Socket.IOの接続処理
+io.on("connection", (socket) => {
+  console.log("A user connected");
+
+  // セラピストから送られた操作を他のクライエントに中継
   socket.on("ball-control", (data) => {
     socket.broadcast.emit("ball-control", data);
   });
 
   socket.on("disconnect", () => {
-    console.log("user disconnected");
+    console.log("A user disconnected");
   });
 });
 
-// 🔽 任意: / にアクセスされたら public-client.html にリダイレクトする
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "public-client.html"));
+// サーバー起動
+server.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
+
 
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
