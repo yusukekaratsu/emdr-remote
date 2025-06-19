@@ -8,7 +8,6 @@
       margin: 0;
       padding: 0;
       height: 100%;
-      background-color: #f8faff;
       overflow: hidden;
       font-family: sans-serif;
     }
@@ -40,23 +39,41 @@
     #ball {
       width: 50px;
       height: 50px;
-      background-color: #ff5733;
       border-radius: 50%;
       position: absolute;
       top: 50%;
       left: 0;
       transform: translateY(-50%);
+      background-color: #FFB3BF;
+    }
+
+    select {
+      margin-top: 8px;
+      padding: 5px;
+      font-size: 14px;
+    }
+
+    option {
+      padding: 4px;
     }
   </style>
 </head>
-<body>
+<body style="background-color: #FFFFFF;">
 
   <div id="controlPanel">
     <h2>セラピスト操作</h2>
+
     <label for="slider">速度: <span id="speedDisplay">5</span></label><br />
-    <input type="range" id="slider" min="1" max=20" value="10" /><br /><br />
+    <input type="range" id="slider" min="1" max="20" value="5" /><br /><br />
+
     <button id="startBtn">スタート</button>
-    <button id="stopBtn">ストップ</button>
+    <button id="stopBtn">ストップ</button><br /><br />
+
+    <label for="ballColor">ボールの色:</label><br />
+    <select id="ballColor"></select><br /><br />
+
+    <label for="bgColor">背景色:</label><br />
+    <select id="bgColor"></select>
   </div>
 
   <div id="ball"></div>
@@ -70,11 +87,53 @@
     const startBtn = document.getElementById("startBtn");
     const stopBtn = document.getElementById("stopBtn");
     const ball = document.getElementById("ball");
+    const ballColor = document.getElementById("ballColor");
+    const bgColor = document.getElementById("bgColor");
 
     let position = 0;
     let direction = 1;
     let speed = parseInt(slider.value);
     let animationId = null;
+
+    // 色リスト（色コードとラベル付き）
+    const ballColors = [
+      "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3",
+      "#BCE0DF", "#DFF5D6", "#FFFAD1", "#FA8072", "#FFFF00",
+      "#800080", "#008000", "#9ACD32", "#00FFFF", "#7FFFD4", "#0000FF"
+    ];
+
+    const bgColors = [
+      "#FFFFFF", "#FFFAFA", "#F0FFFF", "#FFFFF0", "#C0C0C0", "#000000"
+    ];
+
+    // セレクトに色を追加（色見本付き）
+    function populateColorSelect(selectElem, colorList) {
+      colorList.forEach(color => {
+        const option = document.createElement("option");
+        option.value = color;
+        option.textContent = `⬛ ${color}`;
+        option.style.backgroundColor = color;
+        option.style.color = (getContrastYIQ(color) === "black") ? "#000" : "#fff";
+        selectElem.appendChild(option);
+      });
+    }
+
+    // 色の見やすさ（背景が明るい or 暗い）で文字色を切り替え
+    function getContrastYIQ(hexcolor){
+      hexcolor = hexcolor.replace("#", "");
+      const r = parseInt(hexcolor.substr(0,2),16);
+      const g = parseInt(hexcolor.substr(2,2),16);
+      const b = parseInt(hexcolor.substr(4,2),16);
+      const yiq = ((r*299)+(g*587)+(b*114))/1000;
+      return (yiq >= 128) ? 'black' : 'white';
+    }
+
+    populateColorSelect(ballColor, ballColors);
+    populateColorSelect(bgColor, bgColors);
+
+    // デフォルト選択
+    ballColor.value = "#FFB3BF";
+    bgColor.value = "#FFFFFF";
 
     function moveBall() {
       position += direction * speed;
@@ -105,21 +164,29 @@
       stopBall();
     });
 
+    ballColor.addEventListener("change", () => {
+      ball.style.backgroundColor = ballColor.value;
+    });
+
+    bgColor.addEventListener("change", () => {
+      document.body.style.backgroundColor = bgColor.value;
+    });
+
+    socket.on("ball-control", (data) => {
+      if (data.type === "start") {
+        moveBall();
+      } else if (data.type === "stop") {
+        stopBall();
+      } else if (data.type === "speed") {
+        speed = data.value;
+      }
+    });
+
     window.addEventListener("resize", () => {
       if (position + 50 > window.innerWidth) {
         position = window.innerWidth - 50;
       }
     });
-    // Socket.io の受信処理を追加（自分でもボールを動かす）
-socket.on("ball-control", (data) => {
-  if (data.type === "start") {
-    moveBall();
-  } else if (data.type === "stop") {
-    stopBall();
-  } else if (data.type === "speed") {
-    speed = data.value;
-  }
-});
   </script>
 </body>
 </html>
