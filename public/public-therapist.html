@@ -94,8 +94,8 @@
     let direction = 1;
     let speed = parseInt(slider.value);
     let animationId = null;
+    let isStopping = false;
 
-    // 色リスト（色コードとラベル付き）
     const ballColors = [
       "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3",
       "#BCE0DF", "#DFF5D6", "#FFFAD1", "#FA8072", "#FFFF00",
@@ -106,20 +106,18 @@
       "#FFFFFF", "#FFFAFA", "#F0FFFF", "#FFFFF0", "#C0C0C0", "#000000"
     ];
 
-    // セレクトに色を追加（色見本付き）
     function populateColorSelect(selectElem, colorList) {
       colorList.forEach(color => {
         const option = document.createElement("option");
         option.value = color;
         option.textContent = `⬛ ${color}`;
         option.style.backgroundColor = color;
-        option.style.color = (getContrastYIQ(color) === "black") ? "#000" : "#fff";
+        option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff";
         selectElem.appendChild(option);
       });
     }
 
-    // 色の見やすさ（背景が明るい or 暗い）で文字色を切り替え
-    function getContrastYIQ(hexcolor){
+    function getContrastYIQ(hexcolor) {
       hexcolor = hexcolor.replace("#", "");
       const r = parseInt(hexcolor.substr(0,2),16);
       const g = parseInt(hexcolor.substr(2,2),16);
@@ -130,22 +128,38 @@
 
     populateColorSelect(ballColor, ballColors);
     populateColorSelect(bgColor, bgColors);
-
-    // デフォルト選択
     ballColor.value = "#FFB3BF";
     bgColor.value = "#FFFFFF";
 
     function moveBall() {
-      position += direction * speed;
-      if (position <= 0 || position + 50 >= window.innerWidth) {
-        direction *= -1;
+      if (isStopping) {
+        const center = (window.innerWidth - 50) / 2;
+        const delta = center - position;
+        speed *= 0.95;
+
+        if (Math.abs(speed) < 0.5 || Math.abs(delta) < 1) {
+          position = center;
+          speed = 0;
+          ball.style.left = position + "px";
+          isStopping = false;
+          cancelAnimationFrame(animationId);
+          return;
+        }
+
+        position += delta * 0.1;
+      } else {
+        position += direction * speed;
+        if (position <= 0 || position + 50 >= window.innerWidth) {
+          direction *= -1;
+        }
       }
+
       ball.style.left = position + "px";
       animationId = requestAnimationFrame(moveBall);
     }
 
     function stopBall() {
-      cancelAnimationFrame(animationId);
+      isStopping = true;
     }
 
     slider.addEventListener("input", () => {
