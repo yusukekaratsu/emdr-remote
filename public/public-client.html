@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>EMDR Client View</title>
+  <title>EMDR Client</title>
   <style>
     html, body {
       margin: 0;
@@ -41,7 +41,7 @@
 
     let isStopping = false;
     let stopProgress = 0;
-    const stopDuration = 180; // 約3秒（60FPS）
+    const stopDuration = 180; // 約3秒
 
     function moveBall() {
       const ballWidth = 50;
@@ -88,6 +88,10 @@
         stopBall();
       } else if (data.type === "speed") {
         speed = data.value;
+      } else if (data.type === "ballColor") {
+        ball.style.backgroundColor = data.value;
+      } else if (data.type === "bgColor") {
+        document.body.style.backgroundColor = data.value;
       }
     });
 
