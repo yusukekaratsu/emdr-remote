@@ -3,73 +3,31 @@
 <head>
   <meta charset="UTF-8" />
   <title>EMDR Therapist Control</title>
+  <style>/* ... スタイルは変更なし ... */</style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      overflow: hidden;
-      font-family: sans-serif;
-    }
-    #controlPanel {
-      position: absolute;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background-color: rgba(255, 255, 255, 0.95);
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-      text-align: center;
-      z-index: 10;
-    }
-    #slider {
-      width: 300px;
-    }
-    #startBtn, #stopBtn {
-      padding: 10px 20px;
-      margin: 10px;
-      font-size: 16px;
-      cursor: pointer;
-    }
-    #ball {
-      width: 50px;
-      height: 50px;
-      border-radius: 50%;
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      background-color: #FFB3BF;
-    }
-    select {
-      margin-top: 8px;
-      padding: 5px;
-      font-size: 14px;
-    }
-    option {
-      padding: 4px;
-    }
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; }
+    #controlPanel { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background-color: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); text-align: center; z-index: 10; }
+    #slider { width: 300px; }
+    #startBtn, #stopBtn { padding: 10px 20px; margin: 10px; font-size: 16px; cursor: pointer; }
+    #ball { width: 50px; height: 50px; border-radius: 50%; position: absolute; top: 50%; transform: translateY(-50%); background-color: #FFB3BF; }
+    select { margin-top: 8px; padding: 5px; font-size: 14px; }
+    option { padding: 4px; }
   </style>
 </head>
 <body style="background-color: #000000;">
 
-  <!-- ▼ここから修正▼: パネルの中身を元に戻しました -->
   <div id="controlPanel">
     <h2>セラピスト操作</h2>
-
     <label for="slider">速度: <span id="speedDisplay">5</span></label><br />
     <input type="range" id="slider" min="1" max="100" value="5" /><br /><br />
-
     <button id="startBtn">スタート</button>
     <button id="stopBtn">ストップ</button><br /><br />
-
     <label for="ballColor">ボールの色:</label><br />
     <select id="ballColor"></select><br /><br />
-
     <label for="bgColor">背景色:</label><br />
     <select id="bgColor"></select>
   </div>
-  <!-- ▲ここまで修正▲ -->
   
   <div id="ball"></div>
 
@@ -84,102 +42,106 @@
     const ballColor = document.getElementById("ballColor");
     const bgColor = document.getElementById("bgColor");
 
-    // ボールの初期位置を中央に設定
-    let position = (window.innerWidth - 50) / 2; // 50はボールの幅
+    let position = (window.innerWidth - 50) / 2;
     ball.style.left = position + "px";
     
     let direction = 1;
     let speed = parseInt(slider.value);
     let animationId = null;
 
-    const ballColors = [
-      "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3",
-      "#BCE0DF", "#DFF5D6", "#FFFAD1", "#FA8072", "#FFFF00",
-      "#800080", "#008000", "#9ACD32", "#00FFFF", "#7FFFD4", "#0000FF"
-    ];
-    const bgColors = [
-      "#FFFFFF", "#FFFAFA", "#F0FFFF", "#FFFFF0", "#C0C0C0", "#000000"
-    ];
+    // ▼ここから追加▼: 停止処理用の変数を復活
+    let isStopping = false;
+    let stopProgress = 0;
+    const stopDuration = 120; // 減速にかかる時間（フレーム数）。約2秒
+    let initialSpeed = speed;
+    // ▲ここまで追加▲
 
-    function populateColorSelect(selectElem, colorList) {
-      colorList.forEach(color => {
-        const option = document.createElement("option");
-        option.value = color;
-        option.textContent = `⬛ ${color}`;
-        option.style.backgroundColor = color;
-        option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff";
-        selectElem.appendChild(option);
-      });
-    }
-
-    function getContrastYIQ(hexcolor) {
-      hexcolor = hexcolor.replace("#", "");
-      const r = parseInt(hexcolor.substr(0,2),16);
-      const g = parseInt(hexcolor.substr(2,2),16);
-      const b = parseInt(hexcolor.substr(4,2),16);
-      const yiq = ((r*299)+(g*587)+(b*114))/1000;
-      return (yiq >= 128) ? 'black' : 'white';
-    }
-
+    const ballColors = [ "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#FA8072", "#FFFF00", "#800080", "#008000", "#9ACD32", "#00FFFF", "#7FFFD4", "#0000FF" ];
+    const bgColors = [ "#FFFFFF", "#FFFAFA", "#F0FFFF", "#FFFFF0", "#C0C0C0", "#000000" ];
+    function populateColorSelect(selectElem, colorList) { colorList.forEach(color => { const option = document.createElement("option"); option.value = color; option.textContent = `⬛ ${color}`; option.style.backgroundColor = color; option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff"; selectElem.appendChild(option); }); }
+    function getContrastYIQ(hexcolor) { hexcolor = hexcolor.replace("#", ""); const r = parseInt(hexcolor.substr(0,2),16); const g = parseInt(hexcolor.substr(2,2),16); const b = parseInt(hexcolor.substr(4,2),16); const yiq = ((r*299)+(g*587)+(b*114))/1000; return (yiq >= 128) ? 'black' : 'white'; }
     populateColorSelect(ballColor, ballColors);
     populateColorSelect(bgColor, bgColors);
     ballColor.value = "#FFB3BF";
     bgColor.value = "#000000";
     
-    slider.addEventListener("input", () => {
-      speed = parseInt(slider.value);
-      speedDisplay.textContent = speed;
-      socket.emit("ball-control", { type: "speed", value: speed });
-    });
-
+    // ▼ここから修正▼: スタート時に停止フラグをリセット
     startBtn.addEventListener("click", () => {
+      isStopping = false; // 停止シーケンスをキャンセル
       socket.emit("ball-control", { type: "start" });
       if (!animationId) {
         moveBall();
       }
     });
+    // ▲ここまで修正▲
 
     stopBtn.addEventListener("click", () => {
       socket.emit("ball-control", { type: "stop" });
       stopBall();
     });
 
-    ballColor.addEventListener("change", () => {
-      const color = ballColor.value;
-      ball.style.backgroundColor = color;
-      socket.emit("ball-control", { type: "ballColor", value: color });
-    });
+    slider.addEventListener("input", () => { /* ...変更なし... */ });
+    ballColor.addEventListener("change", () => { /* ...変更なし... */ });
+    bgColor.addEventListener("change", () => { /* ...変更なし... */ });
+    slider.addEventListener("input", () => { speed = parseInt(slider.value); speedDisplay.textContent = speed; socket.emit("ball-control", { type: "speed", value: speed }); });
+    ballColor.addEventListener("change", () => { const color = ballColor.value; ball.style.backgroundColor = color; socket.emit("ball-control", { type: "ballColor", value: color }); });
+    bgColor.addEventListener("change", () => { const color = bgColor.value; document.body.style.backgroundColor = color; socket.emit("ball-control", { type: "bgColor", value: color }); });
 
-    bgColor.addEventListener("change", () => {
-      const color = bgColor.value;
-      document.body.style.backgroundColor = color;
-      socket.emit("ball-control", { type: "bgColor", value: color });
-    });
-
+    // ▼ここから修正▼: ボールの移動ロジックを全面的に書き換え
     function moveBall() {
       const ballWidth = 50;
       const screenWidth = window.innerWidth;
-      position += direction * speed;
-      if (position <= 0 || position + ballWidth >= screenWidth) {
-        direction *= -1;
-        position = Math.max(0, Math.min(position, screenWidth - ballWidth));
-      }
-      ball.style.left = position + "px";
-      animationId = requestAnimationFrame(moveBall);
-    }
 
+      if (isStopping) {
+        const center = (screenWidth - ballWidth) / 2;
+        stopProgress += 1 / stopDuration;
+
+        if (stopProgress >= 1) {
+          // 完全に停止
+          position = center;
+          cancelAnimationFrame(animationId);
+          animationId = null;
+          isStopping = false;
+        } else {
+          // イージングで減速しながら中央へ
+          const currentSpeed = initialSpeed * Math.pow(1 - stopProgress, 2);
+          const delta = center - position;
+          const moveDirection = delta > 0 ? 1 : -1;
+          position += moveDirection * Math.min(Math.abs(delta), currentSpeed);
+        }
+      } else {
+        // 通常の往復運動
+        position += direction * speed;
+        if (position <= 0 || position + ballWidth >= screenWidth) {
+          direction *= -1;
+          position = Math.max(0, Math.min(position, screenWidth - ballWidth));
+        }
+      }
+
+      ball.style.left = position + "px";
+      if(animationId) animationId = requestAnimationFrame(moveBall);
+      else if(!isStopping) animationId = requestAnimationFrame(moveBall);
+    }
+    // ▲ここまで修正▲
+
+    // ▼ここから修正▼: 停止フラグを立てる処理に変更
     function stopBall() {
-      if (animationId) {
-        cancelAnimationFrame(animationId);
-        animationId = null;
+      if (animationId && !isStopping) {
+        isStopping = true;
+        stopProgress = 0;
+        initialSpeed = speed; // 停止開始時の速度を記録
       }
     }
+    // ▲ここまで修正▲
 
     socket.on("ball-control", (data) => {
+      // ▼ここから修正▼: スタート時に停止フラグをリセット
       if (data.type === "start") {
+        isStopping = false;
         if (!animationId) {
             moveBall();
         }
+      // ▲ここまで修正▲
       } else if (data.type === "stop") {
         stopBall();
       } else if (data.type === "speed") {
@@ -197,17 +159,8 @@
       }
     });
 
-    window.addEventListener("resize", () => {
-      const ballWidth = 50;
-      if (!animationId) {
-        position = (window.innerWidth - ballWidth) / 2;
-      } else {
-        if (position + ballWidth > window.innerWidth) {
-          position = window.innerWidth - ballWidth;
-        }
-      }
-      ball.style.left = position + 'px';
-    });
+    window.addEventListener("resize", () => { /* ...変更なし... */ });
+    window.addEventListener("resize", () => { const ballWidth = 50; if (!animationId) { position = (window.innerWidth - ballWidth) / 2; } else { if (position + ballWidth > window.innerWidth) { position = window.innerWidth - ballWidth; } } ball.style.left = position + 'px'; });
   </script>
 </body>
 </html>
