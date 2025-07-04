@@ -4,16 +4,15 @@
   <meta charset="UTF-8" />
   <title>EMDR Client</title>
   <style>
-    /* 画面全体を使い、余白をなくす基本設定 */
     html, body {
       margin: 0;
       padding: 0;
       height: 100%;
-      overflow: hidden; /* スクロールバーを非表示にする */
-      background-color: #000000; /* 初期背景色 */
+      overflow: hidden;
+      background-color: #000000;
+      font-family: sans-serif;
     }
 
-    /* ボールのスタイル */
     #ball {
       width: 50px;
       height: 50px;
@@ -21,84 +20,150 @@
       position: absolute;
       top: 50%;
       left: 0;
-      transform: translateY(-50%); /* 上下中央に配置 */
-      background-color: #FFB3BF; /* 初期ボール色 */
+      transform: translateY(-50%);
+      background-color: #FFB3BF;
     }
+
+    /* ▼ここから追加▼: 色選択パネルのスタイル */
+    #colorChooser {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: rgba(255, 255, 255, 0.95);
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      text-align: center;
+      z-index: 10;
+    }
+    #colorChooser label {
+      font-size: 18px;
+      color: #333;
+    }
+    #colorChooser select {
+      margin-top: 10px;
+      padding: 5px;
+      font-size: 14px;
+      min-width: 150px;
+    }
+    #colorChooser option {
+      padding: 4px;
+    }
+    /* ▲ここまで追加▲ */
   </style>
 </head>
 <body>
-  <!-- 画面に表示されるのはこのボールだけです -->
+
+  <!-- ▼ここから追加▼: 色を選択するためのUI -->
+  <div id="colorChooser">
+    <label for="clientBallColor">ボールの色を選んでください</label><br>
+    <select id="clientBallColor"></select>
+  </div>
+  <!-- ▲ここまで追加▲ -->
+
   <div id="ball"></div>
 
-  <!-- サーバーと通信するためのライブラリ -->
   <script src="/socket.io/socket.io.js"></script>
-  
-  <!-- ボールを動かすためのスクリプト -->
   <script>
     const socket = io();
 
     const ball = document.getElementById("ball");
+    // ▼ここから追加▼
+    const colorChooser = document.getElementById("colorChooser");
+    const clientBallColor = document.getElementById("clientBallColor");
+    // ▲ここまで追加▲
 
-    // ボールの状態を管理する変数
     let position = 0;
     let direction = 1;
     let speed = 5;
-    let animationId = null; // アニメーションのIDを管理
+    let animationId = null;
 
-    // ボールを動かす関数
+    // ▼ここから追加▼: セラピスト側から色選択のロジックをコピー
+    const ballColors = [
+      "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3",
+      "#BCE0DF", "#DFF5D6", "#FFFAD1", "#FA8072", "#FFFF00",
+      "#800080", "#008000", "#9ACD32", "#00FFFF", "#7FFFD4", "#0000FF"
+    ];
+
+    function populateColorSelect(selectElem, colorList) {
+      colorList.forEach(color => {
+        const option = document.createElement("option");
+        option.value = color;
+        option.textContent = `⬛ ${color}`;
+        option.style.backgroundColor = color;
+        option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff";
+        selectElem.appendChild(option);
+      });
+    }
+
+    function getContrastYIQ(hexcolor) {
+      hexcolor = hexcolor.replace("#", "");
+      const r = parseInt(hexcolor.substr(0,2),16);
+      const g = parseInt(hexcolor.substr(2,2),16);
+      const b = parseInt(hexcolor.substr(4,2),16);
+      const yiq = ((r*299)+(g*587)+(b*114))/1000;
+      return (yiq >= 128) ? 'black' : 'white';
+    }
+
+    // セレクトボックスに色の選択肢を追加
+    populateColorSelect(clientBallColor, ballColors);
+    clientBallColor.value = "#FFB3BF"; // 初期値を設定
+
+    // クライアントが色を変更したときの処理
+    clientBallColor.addEventListener("change", () => {
+      const newColor = clientBallColor.value;
+      // 自分のボールの色を即座に変更
+      ball.style.backgroundColor = newColor;
+      // セラピスト側に色の変更を通知
+      socket.emit("ball-control", { type: "ballColor", value: newColor });
+    });
+    // ▲ここまで追加▲
+
     function moveBall() {
       const ballWidth = 50;
       const screenWidth = window.innerWidth;
-
-      // ボールを現在の速度と方向に基づいて移動
       position += direction * speed;
-
-      // ボールが画面の端に達したら方向を反転
       if (position <= 0 || position + ballWidth >= screenWidth) {
         direction *= -1;
-        // 画面外にはみ出ないように位置を補正
         position = Math.max(0, Math.min(position, screenWidth - ballWidth));
       }
-
-      // ボールの位置を画面に反映
       ball.style.left = position + "px";
-      
-      // 次のフレームで再びこの関数を呼び出す
       animationId = requestAnimationFrame(moveBall);
     }
 
-    // ボールを停止させる関数
     function stopBall() {
       if (animationId) {
         cancelAnimationFrame(animationId);
-        animationId = null; // 停止状態を示す
+        animationId = null;
       }
     }
 
-    // セラピスト側からの指示を受け取るリスナー
     socket.on("ball-control", (data) => {
-      // 指示のタイプに応じて処理を分岐
       if (data.type === "start") {
-        // まだ動いていなければ、ボールを動かし始める
+        // ▼ここから修正▼: スタート時に色選択パネルを消す
+        if (colorChooser) {
+          colorChooser.style.display = "none";
+        }
+        // ▲ここまで修正▲
         if (!animationId) {
           moveBall();
         }
       } else if (data.type === "stop") {
-        // ボールを停止させる
         stopBall();
       } else if (data.type === "speed") {
-        // ボールの速度を変更
         speed = data.value;
       } else if (data.type === "ballColor") {
-        // ボールの色を変更
-        ball.style.backgroundColor = data.value;
+        const color = data.value;
+        ball.style.backgroundColor = color;
+        // ▼ここから追加▼: セラピスト側で変更された場合もセレクトボックスに反映
+        clientBallColor.value = color;
+        // ▲ここまで追加▲
       } else if (data.type === "bgColor") {
-        // 背景色を変更
         document.body.style.backgroundColor = data.value;
       }
     });
 
-    // ブラウザのウィンドウサイズが変更された時にボールが画面外に出ないように調整
     window.addEventListener("resize", () => {
       if (position + 50 > window.innerWidth) {
         position = window.innerWidth - 50;
