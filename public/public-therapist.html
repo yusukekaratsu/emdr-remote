@@ -58,7 +58,7 @@
     }
   </style>
 </head>
-<body style="background-color: #FFFFFF;">
+<body style="background-color: #000000;">
 
   <div id="controlPanel">
     <h2>セラピスト操作</h2>
@@ -98,8 +98,7 @@
 
     let isStopping = false;
     let stopProgress = 0;
-
-    const stopDuration = 180; // 約3秒（60FPS）
+    const stopDuration = 180;
 
     const ballColors = [
       "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3",
@@ -191,11 +190,15 @@
     });
 
     ballColor.addEventListener("change", () => {
-      ball.style.backgroundColor = ballColor.value;
+      const color = ballColor.value;
+      ball.style.backgroundColor = color;
+      socket.emit("ball-control", { type: "ballColor", value: color });
     });
 
     bgColor.addEventListener("change", () => {
-      document.body.style.backgroundColor = bgColor.value;
+      const color = bgColor.value;
+      document.body.style.backgroundColor = color;
+      socket.emit("ball-control", { type: "bgColor", value: color });
     });
 
     socket.on("ball-control", (data) => {
