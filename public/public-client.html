@@ -3,55 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <title>EMDR Client</title>
+  <style>/* ... スタイルは変更なし ... */</style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      overflow: hidden;
-      background-color: #000000;
-      font-family: sans-serif;
-    }
-
-    #ball {
-      width: 50px;
-      height: 50px;
-      border-radius: 50%;
-      position: absolute;
-      top: 50%;
-      /* left: 0; はJSで制御するため削除してもOK */
-      transform: translateY(-50%);
-      background-color: #FFB3BF;
-    }
-
-    /* ▼ここから修正▼: 色選択パネルの位置を調整 */
-    #colorChooser {
-      position: absolute;
-      top: 30%; /* 画面上部寄りに変更 (50% -> 30%) */
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background-color: rgba(255, 255, 255, 0.95);
-      padding: 25px;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-      text-align: center;
-      z-index: 10;
-    }
-    /* ...以下のスタイルは変更なし... */
-    #colorChooser label {
-      font-size: 18px;
-      color: #333;
-    }
-    #colorChooser select {
-      margin-top: 10px;
-      padding: 5px;
-      font-size: 14px;
-      min-width: 150px;
-    }
-    #colorChooser option {
-      padding: 4px;
-    }
-    /* ▲ここまで修正▲ */
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background-color: #000000; font-family: sans-serif; }
+    #ball { width: 50px; height: 50px; border-radius: 50%; position: absolute; top: 50%; transform: translateY(-50%); background-color: #FFB3BF; }
+    #colorChooser { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); background-color: rgba(255, 255, 255, 0.95); padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); text-align: center; z-index: 10; }
+    #colorChooser label { font-size: 18px; color: #333; }
+    #colorChooser select { margin-top: 10px; padding: 5px; font-size: 14px; min-width: 150px; }
+    #colorChooser option { padding: 4px; }
   </style>
 </head>
 <body>
@@ -68,76 +28,85 @@
     const colorChooser = document.getElementById("colorChooser");
     const clientBallColor = document.getElementById("clientBallColor");
 
-    // ▼ここから修正▼: ボールの初期位置を中央に設定
-    let position = (window.innerWidth - 50) / 2; // 50はボールの幅
+    let position = (window.innerWidth - 50) / 2;
     ball.style.left = position + "px";
-    // ▲ここまで修正▲
 
     let direction = 1;
     let speed = 5;
     let animationId = null;
 
-    // ... populateColorSelect, getContrastYIQ, イベントリスナーなどは変更なし ...
-    const ballColors = [
-      "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3",
-      "#BCE0DF", "#DFF5D6", "#FFFAD1", "#FA8072", "#FFFF00",
-      "#800080", "#008000", "#9ACD32", "#00FFFF", "#7FFFD4", "#0000FF"
-    ];
-    function populateColorSelect(selectElem, colorList) {
-      colorList.forEach(color => {
-        const option = document.createElement("option");
-        option.value = color;
-        option.textContent = `⬛ ${color}`;
-        option.style.backgroundColor = color;
-        option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff";
-        selectElem.appendChild(option);
-      });
-    }
-    function getContrastYIQ(hexcolor) {
-      hexcolor = hexcolor.replace("#", "");
-      const r = parseInt(hexcolor.substr(0,2),16);
-      const g = parseInt(hexcolor.substr(2,2),16);
-      const b = parseInt(hexcolor.substr(4,2),16);
-      const yiq = ((r*299)+(g*587)+(b*114))/1000;
-      return (yiq >= 128) ? 'black' : 'white';
-    }
+    // ▼ここから追加▼: 停止処理用の変数を復活
+    let isStopping = false;
+    let stopProgress = 0;
+    const stopDuration = 120; // 減速にかかる時間（フレーム数）。約2秒
+    let initialSpeed = speed;
+    // ▲ここまで追加▲
+
+    const ballColors = [ "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#FA8072", "#FFFF00", "#800080", "#008000", "#9ACD32", "#00FFFF", "#7FFFD4", "#0000FF" ];
+    function populateColorSelect(selectElem, colorList) { colorList.forEach(color => { const option = document.createElement("option"); option.value = color; option.textContent = `⬛ ${color}`; option.style.backgroundColor = color; option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff"; selectElem.appendChild(option); }); }
+    function getContrastYIQ(hexcolor) { hexcolor = hexcolor.replace("#", ""); const r = parseInt(hexcolor.substr(0,2),16); const g = parseInt(hexcolor.substr(2,2),16); const b = parseInt(hexcolor.substr(4,2),16); const yiq = ((r*299)+(g*587)+(b*114))/1000; return (yiq >= 128) ? 'black' : 'white'; }
     populateColorSelect(clientBallColor, ballColors);
     clientBallColor.value = "#FFB3BF";
-    clientBallColor.addEventListener("change", () => {
-      const newColor = clientBallColor.value;
-      ball.style.backgroundColor = newColor;
-      socket.emit("ball-control", { type: "ballColor", value: newColor });
-    });
+    clientBallColor.addEventListener("change", () => { const newColor = clientBallColor.value; ball.style.backgroundColor = newColor; socket.emit("ball-control", { type: "ballColor", value: newColor }); });
 
-    function moveBall() { /* ...変更なし... */ }
-    function stopBall() { /* ...変更なし... */ }
-    socket.on("ball-control", (data) => { /* ...変更なし... */ });
-    
+    // ▼ここから修正▼: ボールの移動ロジックを全面的に書き換え
     function moveBall() {
       const ballWidth = 50;
       const screenWidth = window.innerWidth;
-      position += direction * speed;
-      if (position <= 0 || position + ballWidth >= screenWidth) {
-        direction *= -1;
-        position = Math.max(0, Math.min(position, screenWidth - ballWidth));
+
+      if (isStopping) {
+        const center = (screenWidth - ballWidth) / 2;
+        stopProgress += 1 / stopDuration;
+
+        if (stopProgress >= 1) {
+          // 完全に停止
+          position = center;
+          cancelAnimationFrame(animationId);
+          animationId = null;
+          isStopping = false;
+        } else {
+          // イージングで減速しながら中央へ
+          const currentSpeed = initialSpeed * Math.pow(1 - stopProgress, 2);
+          const delta = center - position;
+          const moveDirection = delta > 0 ? 1 : -1;
+          position += moveDirection * Math.min(Math.abs(delta), currentSpeed);
+        }
+      } else {
+        // 通常の往復運動
+        position += direction * speed;
+        if (position <= 0 || position + ballWidth >= screenWidth) {
+          direction *= -1;
+          position = Math.max(0, Math.min(position, screenWidth - ballWidth));
+        }
       }
+
       ball.style.left = position + "px";
-      animationId = requestAnimationFrame(moveBall);
+      if(animationId) animationId = requestAnimationFrame(moveBall);
+      else if(!isStopping) animationId = requestAnimationFrame(moveBall);
     }
+    // ▲ここまで修正▲
+    
+    // ▼ここから修正▼: 停止フラグを立てる処理に変更
     function stopBall() {
-      if (animationId) {
-        cancelAnimationFrame(animationId);
-        animationId = null;
+      if (animationId && !isStopping) {
+        isStopping = true;
+        stopProgress = 0;
+        initialSpeed = speed; // 停止開始時の速度を記録
       }
     }
+    // ▲ここまで修正▲
+
     socket.on("ball-control", (data) => {
+      // ▼ここから修正▼: スタート時に停止フラグをリセット
       if (data.type === "start") {
+        isStopping = false; // 停止シーケンスをキャンセル
         if (colorChooser) {
           colorChooser.style.display = "none";
         }
         if (!animationId) {
           moveBall();
         }
+      // ▲ここまで修正▲
       } else if (data.type === "stop") {
         stopBall();
       } else if (data.type === "speed") {
@@ -151,22 +120,8 @@
       }
     });
 
-
-    // ▼ここから修正▼: リサイズ時の処理を改善
-    window.addEventListener("resize", () => {
-      const ballWidth = 50;
-      // ボールが動いていない（停止中）の場合、常に中央に再配置
-      if (!animationId) {
-        position = (window.innerWidth - ballWidth) / 2;
-      } else {
-        // 動いている場合は、画面右端からはみ出ないように補正
-        if (position + ballWidth > window.innerWidth) {
-          position = window.innerWidth - ballWidth;
-        }
-      }
-      ball.style.left = position + 'px';
-    });
-    // ▲ここまで修正▲
+    window.addEventListener("resize", () => { /* ...変更なし... */ });
+    window.addEventListener("resize", () => { const ballWidth = 50; if (!animationId) { position = (window.innerWidth - ballWidth) / 2; } else { if (position + ballWidth > window.innerWidth) { position = window.innerWidth - ballWidth; } } ball.style.left = position + 'px'; });
   </script>
 </body>
 </html>
