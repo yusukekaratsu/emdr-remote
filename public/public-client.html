@@ -50,40 +50,48 @@
     clientBallColor.addEventListener("change", () => { const newColor = clientBallColor.value; ball.style.backgroundColor = newColor; socket.emit("ball-control", { type: "ballColor", value: newColor }); });
 
     // ▼ここから修正▼: ボールの移動ロジックを全面的に書き換え
-    function moveBall() {
-      const ballWidth = 50;
-      const screenWidth = window.innerWidth;
+// (control.html の <script> タグ内)
 
-      if (isStopping) {
-        const center = (screenWidth - ballWidth) / 2;
-        stopProgress += 1 / stopDuration;
+// (client.html の <script> タグ内)
 
-        if (stopProgress >= 1) {
-          // 完全に停止
-          position = center;
-          cancelAnimationFrame(animationId);
-          animationId = null;
-          isStopping = false;
-        } else {
-          // イージングで減速しながら中央へ
-          const currentSpeed = initialSpeed * Math.pow(1 - stopProgress, 2);
-          const delta = center - position;
-          const moveDirection = delta > 0 ? 1 : -1;
-          position += moveDirection * Math.min(Math.abs(delta), currentSpeed);
-        }
-      } else {
-        // 通常の往復運動
-        position += direction * speed;
-        if (position <= 0 || position + ballWidth >= screenWidth) {
-          direction *= -1;
-          position = Math.max(0, Math.min(position, screenWidth - ballWidth));
-        }
-      }
+// ▼▼▼ この moveBall 関数をまるごと置き換えてください ▼▼▼
+function moveBall() {
+  const ballWidth = 50;
+  const screenWidth = window.innerWidth;
 
-      ball.style.left = position + "px";
-      if(animationId) animationId = requestAnimationFrame(moveBall);
-      else if(!isStopping) animationId = requestAnimationFrame(moveBall);
+  if (isStopping) {
+    const center = (screenWidth - ballWidth) / 2;
+    stopProgress += 1 / stopDuration;
+
+    if (stopProgress >= 1) {
+      // 完全に停止
+      position = center;
+      ball.style.left = position + "px"; // 最終位置を反映
+      cancelAnimationFrame(animationId);
+      animationId = null;
+      isStopping = false;
+      return; // ★★★★★ これが重要！ここで関数を終了させる
+    } else {
+      // イージングで減速しながら中央へ
+      const currentSpeed = initialSpeed * Math.pow(1 - stopProgress, 2);
+      const delta = center - position;
+      const moveDirection = delta > 0 ? 1 : -1;
+      position += moveDirection * Math.min(Math.abs(delta), currentSpeed);
     }
+  } else {
+    // 通常の往復運動
+    position += direction * speed;
+    if (position <= 0 || position + ballWidth >= screenWidth) {
+      direction *= -1;
+      position = Math.max(0, Math.min(position, screenWidth - ballWidth));
+    }
+  }
+
+  ball.style.left = position + "px";
+  // アニメーションの再開は、関数の最後に1回だけ記述するシンプルな形に戻す
+  animationId = requestAnimationFrame(moveBall);
+}
+
     // ▲ここまで修正▲
     
     // ▼ここから修正▼: 停止フラグを立てる処理に変更
