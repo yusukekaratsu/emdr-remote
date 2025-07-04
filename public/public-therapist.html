@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <title>EMDR Therapist Control</title>
   <style>
+    /* ...スタイルは変更なし... */
     html, body {
       margin: 0;
       padding: 0;
@@ -62,24 +63,19 @@
 
   <div id="controlPanel">
     <h2>セラピスト操作</h2>
-
     <label for="slider">速度: <span id="speedDisplay">5</span></label><br />
     <input type="range" id="slider" min="1" max="100" value="5" /><br /><br />
-
     <button id="startBtn">スタート</button>
     <button id="stopBtn">ストップ</button><br /><br />
-
     <label for="ballColor">ボールの色:</label><br />
     <select id="ballColor"></select><br /><br />
-
     <label for="bgColor">背景色:</label><br />
     <select id="bgColor"></select>
   </div>
-
   <div id="ball"></div>
-
   <script src="/socket.io/socket.io.js"></script>
   <script>
+    // ... 大部分のスクリプトは変更なし ...
     const socket = io();
 
     const slider = document.getElementById("slider");
@@ -128,20 +124,16 @@
     populateColorSelect(ballColor, ballColors);
     populateColorSelect(bgColor, bgColors);
     ballColor.value = "#FFB3BF";
-    bgColor.value = "#000000"; // 初期背景色を黒に合わせる
+    bgColor.value = "#000000";
 
     function moveBall() {
       const ballWidth = 50;
       const screenWidth = window.innerWidth;
-
       position += direction * speed;
-
       if (position <= 0 || position + ballWidth >= screenWidth) {
         direction *= -1;
-        // 画面外にはみ出ないように位置を補正
         position = Math.max(0, Math.min(position, screenWidth - ballWidth));
       }
-
       ball.style.left = position + "px";
       animationId = requestAnimationFrame(moveBall);
     }
@@ -149,7 +141,7 @@
     function stopBall() {
       if (animationId) {
         cancelAnimationFrame(animationId);
-        animationId = null; // 停止したことを示すためにnullを代入
+        animationId = null;
       }
     }
 
@@ -161,7 +153,7 @@
 
     startBtn.addEventListener("click", () => {
       socket.emit("ball-control", { type: "start" });
-      if (!animationId) { // アニメーションが実行中でなければ開始
+      if (!animationId) {
         moveBall();
       }
     });
@@ -183,17 +175,29 @@
       socket.emit("ball-control", { type: "bgColor", value: color });
     });
 
+    // ▼ここから修正▼: socket.onに関数を追加
     socket.on("ball-control", (data) => {
       if (data.type === "start") {
-        if (!animationId) { // アニメーションが実行中でなければ開始
+        if (!animationId) {
             moveBall();
         }
       } else if (data.type === "stop") {
         stopBall();
       } else if (data.type === "speed") {
         speed = data.value;
+        // ▼ここから追加▼: クライアントからの色の変更を反映させる
+      } else if (data.type === "ballColor") {
+        const color = data.value;
+        ball.style.backgroundColor = color;
+        ballColor.value = color; // セラピスト側のセレクトボックスも同期
+      } else if (data.type === "bgColor") {
+        const color = data.value;
+        document.body.style.backgroundColor = color;
+        bgColor.value = color; // セラピスト側のセレクトボックスも同期
+        // ▲ここまで追加▲
       }
     });
+    // ▲ここまで修正▲
 
     window.addEventListener("resize", () => {
       if (position + 50 > window.innerWidth) {
