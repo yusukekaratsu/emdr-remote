@@ -93,11 +93,13 @@
     let position = 0;
     let direction = 1;
     let speed = parseInt(slider.value);
+    let initialSpeed = speed;
     let animationId = null;
 
     let isStopping = false;
-    let stopPhase = 0;
-    let stopFrame = 0;
+    let stopProgress = 0;
+
+    const stopDuration = 180; // 約3秒（60FPS）
 
     const ballColors = [
       "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3",
@@ -137,31 +139,24 @@
     function moveBall() {
       const ballWidth = 50;
       const screenWidth = window.innerWidth;
+      const center = (screenWidth - ballWidth) / 2;
+
+      let currentSpeed = speed;
 
       if (isStopping) {
-        stopFrame++;
-
-        // 減速と2往復
-        if (stopPhase < 2) {
-          position += direction * speed;
-          if (position <= 0 || position + ballWidth >= screenWidth) {
-            direction *= -1;
-            stopPhase++;
-          }
-          speed *= 0.97;
-        } else {
-          // 最終フェーズ：中央に向かって吸収
-          const center = (screenWidth - ballWidth) / 2;
-          const delta = center - position;
-          position += delta * 0.1;
-
-          if (Math.abs(delta) < 1) {
-            position = center;
-            isStopping = false;
-            cancelAnimationFrame(animationId);
-            return;
-          }
+        stopProgress += 1 / stopDuration;
+        if (stopProgress >= 1) {
+          position = center;
+          ball.style.left = position + "px";
+          cancelAnimationFrame(animationId);
+          isStopping = false;
+          return;
         }
+
+        currentSpeed = initialSpeed * Math.pow(1 - stopProgress, 2);
+        const delta = center - position;
+        direction = delta > 0 ? 1 : -1;
+        position += direction * Math.min(Math.abs(delta), currentSpeed);
       } else {
         position += direction * speed;
         if (position <= 0 || position + ballWidth >= screenWidth) {
@@ -175,8 +170,8 @@
 
     function stopBall() {
       isStopping = true;
-      stopPhase = 0;
-      stopFrame = 0;
+      stopProgress = 0;
+      initialSpeed = speed;
     }
 
     slider.addEventListener("input", () => {
