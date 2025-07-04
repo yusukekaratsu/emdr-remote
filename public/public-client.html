@@ -1,23 +1,26 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>EMDR Client</title>
+  <meta charset="UTF-8" />
+  <title>EMDR Client View</title>
   <style>
-    body {
+    html, body {
       margin: 0;
+      padding: 0;
+      height: 100%;
       overflow: hidden;
-      background-color: #f0f8ff;
+      background-color: #FFFFFF;
     }
+
     #ball {
       width: 50px;
       height: 50px;
-      background-color: #007bff;
       border-radius: 50%;
       position: absolute;
       top: 50%;
       left: 0;
       transform: translateY(-50%);
+      background-color: #FFB3BF;
     }
   </style>
 </head>
@@ -27,6 +30,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
+
     const ball = document.getElementById("ball");
 
     let position = 0;
@@ -34,17 +38,53 @@
     let speed = 5;
     let animationId = null;
 
+    let isStopping = false;
+    let stopPhase = 0;
+    let stopFrame = 0;
+
     function moveBall() {
-      position += direction * speed;
-      if (position <= 0 || position + 50 >= window.innerWidth) {
-        direction *= -1;
+      const ballWidth = 50;
+      const screenWidth = window.innerWidth;
+
+      if (isStopping) {
+        stopFrame++;
+
+        // 減速と2往復
+        if (stopPhase < 2) {
+          position += direction * speed;
+          if (position <= 0 || position + ballWidth >= screenWidth) {
+            direction *= -1;
+            stopPhase++;
+          }
+          speed *= 0.97;
+        } else {
+          // 最終フェーズ：中央に向かって吸収
+          const center = (screenWidth - ballWidth) / 2;
+          const delta = center - position;
+          position += delta * 0.1;
+
+          if (Math.abs(delta) < 1) {
+            position = center;
+            isStopping = false;
+            cancelAnimationFrame(animationId);
+            return;
+          }
+        }
+      } else {
+        position += direction * speed;
+        if (position <= 0 || position + ballWidth >= screenWidth) {
+          direction *= -1;
+        }
       }
+
       ball.style.left = position + "px";
       animationId = requestAnimationFrame(moveBall);
     }
 
     function stopBall() {
-      cancelAnimationFrame(animationId);
+      isStopping = true;
+      stopPhase = 0;
+      stopFrame = 0;
     }
 
     socket.on("ball-control", (data) => {
@@ -57,7 +97,6 @@
       }
     });
 
-    // 初期位置調整
     window.addEventListener("resize", () => {
       if (position + 50 > window.innerWidth) {
         position = window.innerWidth - 50;
