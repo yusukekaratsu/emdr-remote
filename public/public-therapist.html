@@ -93,12 +93,7 @@
     let position = 0;
     let direction = 1;
     let speed = parseInt(slider.value);
-    let initialSpeed = speed;
     let animationId = null;
-
-    let isStopping = false;
-    let stopProgress = 0;
-    const stopDuration = 180;
 
     const ballColors = [
       "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3",
@@ -133,34 +128,18 @@
     populateColorSelect(ballColor, ballColors);
     populateColorSelect(bgColor, bgColors);
     ballColor.value = "#FFB3BF";
-    bgColor.value = "#FFFFFF";
+    bgColor.value = "#000000"; // 初期背景色を黒に合わせる
 
     function moveBall() {
       const ballWidth = 50;
       const screenWidth = window.innerWidth;
-      const center = (screenWidth - ballWidth) / 2;
 
-      let currentSpeed = speed;
+      position += direction * speed;
 
-      if (isStopping) {
-        stopProgress += 1 / stopDuration;
-        if (stopProgress >= 1) {
-          position = center;
-          ball.style.left = position + "px";
-          cancelAnimationFrame(animationId);
-          isStopping = false;
-          return;
-        }
-
-        currentSpeed = initialSpeed * Math.pow(1 - stopProgress, 2);
-        const delta = center - position;
-        direction = delta > 0 ? 1 : -1;
-        position += direction * Math.min(Math.abs(delta), currentSpeed);
-      } else {
-        position += direction * speed;
-        if (position <= 0 || position + ballWidth >= screenWidth) {
-          direction *= -1;
-        }
+      if (position <= 0 || position + ballWidth >= screenWidth) {
+        direction *= -1;
+        // 画面外にはみ出ないように位置を補正
+        position = Math.max(0, Math.min(position, screenWidth - ballWidth));
       }
 
       ball.style.left = position + "px";
@@ -168,9 +147,10 @@
     }
 
     function stopBall() {
-      isStopping = true;
-      stopProgress = 0;
-      initialSpeed = speed;
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null; // 停止したことを示すためにnullを代入
+      }
     }
 
     slider.addEventListener("input", () => {
@@ -181,7 +161,9 @@
 
     startBtn.addEventListener("click", () => {
       socket.emit("ball-control", { type: "start" });
-      moveBall();
+      if (!animationId) { // アニメーションが実行中でなければ開始
+        moveBall();
+      }
     });
 
     stopBtn.addEventListener("click", () => {
@@ -203,7 +185,9 @@
 
     socket.on("ball-control", (data) => {
       if (data.type === "start") {
-        moveBall();
+        if (!animationId) { // アニメーションが実行中でなければ開始
+            moveBall();
+        }
       } else if (data.type === "stop") {
         stopBall();
       } else if (data.type === "speed") {
