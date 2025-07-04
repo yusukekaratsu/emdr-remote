@@ -2,14 +2,38 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>EMDR Client</title>
+  <title>EMDR Therapist Control</title>
   <style>
     html, body {
       margin: 0;
       padding: 0;
       height: 100%;
       overflow: hidden;
-      background-color: #000000;
+      font-family: sans-serif;
+    }
+
+    #controlPanel {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(255, 255, 255, 0.95);
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      text-align: center;
+      z-index: 10;
+    }
+
+    #slider {
+      width: 300px;
+    }
+
+    #startBtn, #stopBtn {
+      padding: 10px 20px;
+      margin: 10px;
+      font-size: 16px;
+      cursor: pointer;
     }
 
     #ball {
@@ -22,53 +46,100 @@
       transform: translateY(-50%);
       background-color: #FFB3BF;
     }
+
+    select {
+      margin-top: 8px;
+      padding: 5px;
+      font-size: 14px;
+    }
+
+    option {
+      padding: 4px;
+    }
   </style>
 </head>
-<body>
+<body style="background-color: #000000;">
+
+  <div id="controlPanel">
+    <h2>セラピスト操作</h2>
+
+    <label for="slider">速度: <span id="speedDisplay">5</span></label><br />
+    <input type="range" id="slider" min="1" max="100" value="5" /><br /><br />
+
+    <button id="startBtn">スタート</button>
+    <button id="stopBtn">ストップ</button><br /><br />
+
+    <label for="ballColor">ボールの色:</label><br />
+    <select id="ballColor"></select><br /><br />
+
+    <label for="bgColor">背景色:</label><br />
+    <select id="bgColor"></select>
+  </div>
+
   <div id="ball"></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
 
+    const slider = document.getElementById("slider");
+    const speedDisplay = document.getElementById("speedDisplay");
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
     const ball = document.getElementById("ball");
+    const ballColor = document.getElementById("ballColor");
+    const bgColor = document.getElementById("bgColor");
 
     let position = 0;
     let direction = 1;
-    let speed = 5;
-    let initialSpeed = speed;
+    let speed = parseInt(slider.value);
     let animationId = null;
 
-    let isStopping = false;
-    let stopProgress = 0;
-    const stopDuration = 180; // 約3秒
+    const ballColors = [
+      "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3",
+      "#BCE0DF", "#DFF5D6", "#FFFAD1", "#FA8072", "#FFFF00",
+      "#800080", "#008000", "#9ACD32", "#00FFFF", "#7FFFD4", "#0000FF"
+    ];
+
+    const bgColors = [
+      "#FFFFFF", "#FFFAFA", "#F0FFFF", "#FFFFF0", "#C0C0C0", "#000000"
+    ];
+
+    function populateColorSelect(selectElem, colorList) {
+      colorList.forEach(color => {
+        const option = document.createElement("option");
+        option.value = color;
+        option.textContent = `⬛ ${color}`;
+        option.style.backgroundColor = color;
+        option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff";
+        selectElem.appendChild(option);
+      });
+    }
+
+    function getContrastYIQ(hexcolor) {
+      hexcolor = hexcolor.replace("#", "");
+      const r = parseInt(hexcolor.substr(0,2),16);
+      const g = parseInt(hexcolor.substr(2,2),16);
+      const b = parseInt(hexcolor.substr(4,2),16);
+      const yiq = ((r*299)+(g*587)+(b*114))/1000;
+      return (yiq >= 128) ? 'black' : 'white';
+    }
+
+    populateColorSelect(ballColor, ballColors);
+    populateColorSelect(bgColor, bgColors);
+    ballColor.value = "#FFB3BF";
+    bgColor.value = "#000000"; // 初期背景色を黒に合わせる
 
     function moveBall() {
       const ballWidth = 50;
       const screenWidth = window.innerWidth;
-      const center = (screenWidth - ballWidth) / 2;
 
-      let currentSpeed = speed;
+      position += direction * speed;
 
-      if (isStopping) {
-        stopProgress += 1 / stopDuration;
-        if (stopProgress >= 1) {
-          position = center;
-          ball.style.left = position + "px";
-          cancelAnimationFrame(animationId);
-          isStopping = false;
-          return;
-        }
-
-        currentSpeed = initialSpeed * Math.pow(1 - stopProgress, 2);
-        const delta = center - position;
-        direction = delta > 0 ? 1 : -1;
-        position += direction * Math.min(Math.abs(delta), currentSpeed);
-      } else {
-        position += direction * speed;
-        if (position <= 0 || position + ballWidth >= screenWidth) {
-          direction *= -1;
-        }
+      if (position <= 0 || position + ballWidth >= screenWidth) {
+        direction *= -1;
+        // 画面外にはみ出ないように位置を補正
+        position = Math.max(0, Math.min(position, screenWidth - ballWidth));
       }
 
       ball.style.left = position + "px";
@@ -76,22 +147,51 @@
     }
 
     function stopBall() {
-      isStopping = true;
-      stopProgress = 0;
-      initialSpeed = speed;
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null; // 停止したことを示すためにnullを代入
+      }
     }
+
+    slider.addEventListener("input", () => {
+      speed = parseInt(slider.value);
+      speedDisplay.textContent = speed;
+      socket.emit("ball-control", { type: "speed", value: speed });
+    });
+
+    startBtn.addEventListener("click", () => {
+      socket.emit("ball-control", { type: "start" });
+      if (!animationId) { // アニメーションが実行中でなければ開始
+        moveBall();
+      }
+    });
+
+    stopBtn.addEventListener("click", () => {
+      socket.emit("ball-control", { type: "stop" });
+      stopBall();
+    });
+
+    ballColor.addEventListener("change", () => {
+      const color = ballColor.value;
+      ball.style.backgroundColor = color;
+      socket.emit("ball-control", { type: "ballColor", value: color });
+    });
+
+    bgColor.addEventListener("change", () => {
+      const color = bgColor.value;
+      document.body.style.backgroundColor = color;
+      socket.emit("ball-control", { type: "bgColor", value: color });
+    });
 
     socket.on("ball-control", (data) => {
       if (data.type === "start") {
-        moveBall();
+        if (!animationId) { // アニメーションが実行中でなければ開始
+            moveBall();
+        }
       } else if (data.type === "stop") {
         stopBall();
       } else if (data.type === "speed") {
         speed = data.value;
-      } else if (data.type === "ballColor") {
-        ball.style.backgroundColor = data.value;
-      } else if (data.type === "bgColor") {
-        document.body.style.backgroundColor = data.value;
       }
     });
 
