@@ -11,6 +11,8 @@
     #ball { width: 50px; height: 50px; border-radius: 50%; position: absolute; top: 50%; transform: translateY(-50%); background-color: #FFB3BF; }
     select { margin-top: 8px; padding: 5px; font-size: 14px; }
     option { padding: 4px; }
+    .color-controls-container { display: flex; justify-content: center; align-items: flex-start; gap: 20px; margin-top: 20px; }
+    .color-control-item { text-align: center; }
   </style>
 </head>
 <body style="background-color: #000000;">
@@ -20,13 +22,20 @@
     <label for="slider">速度: <span id="speedDisplay">5</span></label><br />
     <input type="range" id="slider" min="1" max="100" value="5" /><br /><br />
     <button id="startBtn">スタート</button>
-    <button id="stopBtn">ストップ</button><br /><br />
-    <label for="ballColor">ボールの色:</label><br />
-    <select id="ballColor"></select><br /><br />
-    <label for="bgColor">背景色:</label><br />
-    <select id="bgColor"></select>
+    <button id="stopBtn">ストップ</button>
+
+    <div class="color-controls-container">
+      <div class="color-control-item">
+        <label for="ballColor">ボールの色:</label><br />
+        <select id="ballColor"></select>
+      </div>
+      <div class="color-control-item">
+        <label for="bgColor">背景色:</label><br />
+        <select id="bgColor"></select>
+      </div>
+    </div>
   </div>
-  
+
   <div id="ball"></div>
 
   <script src="/socket.io/socket.io.js"></script>
@@ -42,7 +51,7 @@
 
     let position = (window.innerWidth - 50) / 2;
     ball.style.left = position + "px";
-    
+
     let direction = 1;
     let speed = parseInt(slider.value);
     let animationId = null;
@@ -54,131 +63,49 @@
 
     const ballColors = [ "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#FA8072", "#FFFF00", "#800080", "#008000", "#9ACD32", "#00FFFF", "#7FFFD4", "#0000FF" ];
     const bgColors = [ "#FFFFFF", "#FFFAFA", "#F0FFFF", "#FFFFF0", "#C0C0C0", "#000000" ];
-    function populateColorSelect(selectElem, colorList) { colorList.forEach(color => { const option = document.createElement("option"); option.value = color; option.textContent = `⬛ ${color}`; option.style.backgroundColor = color; option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff"; selectElem.appendChild(option); }); }
-    function getContrastYIQ(hexcolor) { hexcolor = hexcolor.replace("#", ""); const r = parseInt(hexcolor.substr(0,2),16); const g = parseInt(hexcolor.substr(2,2),16); const b = parseInt(hexcolor.substr(4,2),16); const yiq = ((r*299)+(g*587)+(b*114))/1000; return (yiq >= 128) ? 'black' : 'white'; }
+
+    function populateColorSelect(selectElem, colorList) {
+      colorList.forEach(color => {
+        const option = document.createElement("option");
+        option.value = color;
+        option.textContent = `⬛ ${color}`;
+        option.style.backgroundColor = color;
+        option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff";
+        selectElem.appendChild(option);
+      });
+    }
+
+    function getContrastYIQ(hexcolor) {
+      hexcolor = hexcolor.replace("#", "");
+      const r = parseInt(hexcolor.substr(0,2),16);
+      const g = parseInt(hexcolor.substr(2,2),16);
+      const b = parseInt(hexcolor.substr(4,2),16);
+      const yiq = ((r*299)+(g*587)+(b*114))/1000;
+      return (yiq >= 128) ? 'black' : 'white';
+    }
+
+    // ▼▼▼ ここが抜け落ちていました！元に戻しました ▼▼▼
     populateColorSelect(ballColor, ballColors);
     populateColorSelect(bgColor, bgColors);
+    // ▲▲▲ ここまで ▲▲▲
+
     ballColor.value = "#FFB3BF";
     bgColor.value = "#000000";
-    
-    startBtn.addEventListener("click", () => {
-      isStopping = false;
-      socket.emit("ball-control", { type: "start" });
-      if (!animationId) {
-        moveBall();
-      }
-    });
-    stopBtn.addEventListener("click", () => {
-      socket.emit("ball-control", { type: "stop" });
-      stopBall();
-    });
+
+    startBtn.addEventListener("click", () => { isStopping = false; socket.emit("ball-control", { type: "start" }); if (!animationId) { moveBall(); } });
+    stopBtn.addEventListener("click", () => { socket.emit("ball-control", { type: "stop" }); stopBall(); });
     slider.addEventListener("input", () => { speed = parseInt(slider.value); speedDisplay.textContent = speed; socket.emit("ball-control", { type: "speed", value: speed }); });
     ballColor.addEventListener("change", () => { const color = ballColor.value; ball.style.backgroundColor = color; socket.emit("ball-control", { type: "ballColor", value: color }); });
     bgColor.addEventListener("change", () => { const color = bgColor.value; document.body.style.backgroundColor = color; socket.emit("ball-control", { type: "bgColor", value: color }); });
 
-    function moveBall() {
-      const ballWidth = 50;
-      const screenWidth = window.innerWidth;
-      if (isStopping) {
-        const center = (screenWidth - ballWidth) / 2;
-        stopProgress += 1 / stopDuration;
-        if (stopProgress >= 1) {
-          position = center;
-          ball.style.left = position + "px";
-          cancelAnimationFrame(animationId);
-          animationId = null;
-          isStopping = false;
-          return;
-        } else {
-          const currentSpeed = initialSpeed * Math.pow(1 - stopProgress, 2);
-          const delta = center - position;
-          const moveDirection = delta > 0 ? 1 : -1;
-          position += moveDirection * Math.min(Math.abs(delta), currentSpeed);
-        }
-      } else {
-        position += direction * speed;
-        if (position <= 0 || position + ballWidth >= screenWidth) {
-          direction *= -1;
-          position = Math.max(0, Math.min(position, screenWidth - ballWidth));
-        }
-      }
-      ball.style.left = position + "px";
-      animationId = requestAnimationFrame(moveBall);
-    }
+    function moveBall() { const ballWidth = 50; const screenWidth = window.innerWidth; if (isStopping) { const center = (screenWidth - ballWidth) / 2; stopProgress += 1 / stopDuration; if (stopProgress >= 1) { position = center; ball.style.left = position + "px"; cancelAnimationFrame(animationId); animationId = null; isStopping = false; return; } else { const currentSpeed = initialSpeed * Math.pow(1 - stopProgress, 2); const delta = center - position; const moveDirection = delta > 0 ? 1 : -1; position += moveDirection * Math.min(Math.abs(delta), currentSpeed); } } else { position += direction * speed; if (position <= 0 || position + ballWidth >= screenWidth) { direction *= -1; position = Math.max(0, Math.min(position, screenWidth - ballWidth)); } } ball.style.left = position + "px"; animationId = requestAnimationFrame(moveBall); }
+    function stopBall() { if (animationId && !isStopping) { isStopping = true; stopProgress = 0; initialSpeed = speed; } }
 
-    function stopBall() {
-      if (animationId && !isStopping) {
-        isStopping = true;
-        stopProgress = 0;
-        initialSpeed = speed;
-      }
-    }
+    socket.on("ball-control", (data) => { if (data.type === "start") { isStopping = false; if (!animationId) { moveBall(); } } else if (data.type === "stop") { stopBall(); } else if (data.type === "speed") { speed = data.value; slider.value = speed; speedDisplay.textContent = speed; } else if (data.type === "ballColor") { const color = data.value; ball.style.backgroundColor = color; ballColor.value = color;  } else if (data.type === "bgColor") { const color = data.value; document.body.style.backgroundColor = color; bgColor.value = color; } });
 
-    socket.on("ball-control", (data) => {
-      if (data.type === "start") {
-        isStopping = false;
-        if (!animationId) { moveBall(); }
-      } else if (data.type === "stop") {
-        stopBall();
-      } else if (data.type === "speed") {
-        speed = data.value;
-        slider.value = speed;
-        speedDisplay.textContent = speed;
-      } else if (data.type === "ballColor") {
-        const color = data.value;
-        ball.style.backgroundColor = color;
-        ballColor.value = color; 
-      } else if (data.type === "bgColor") {
-        const color = data.value;
-        document.body.style.backgroundColor = color;
-        bgColor.value = color;
-      }
-    });
+    window.addEventListener('keydown', (event) => { switch (event.key) { case 'Enter': if (animationId) { stopBtn.click(); } else { startBtn.click(); } event.preventDefault(); break; case 'ArrowRight': slider.value = parseInt(slider.value) + 1; slider.dispatchEvent(new Event('input')); event.preventDefault(); break; case 'ArrowLeft': slider.value = parseInt(slider.value) - 1; slider.dispatchEvent(new Event('input')); event.preventDefault(); break; } });
 
-    // ▼▼▼ ここから追加: キーボード操作の処理 ▼▼▼
-    window.addEventListener('keydown', (event) => {
-      // 押されたキーの種類を判定
-      switch (event.key) {
-        case 'Enter':
-          // Enterキーでスタート/ストップをトグル
-          // animationId があれば動いている状態、なければ止まっている状態
-          if (animationId) {
-            stopBtn.click(); // 停止ボタンをプログラム的にクリック
-          } else {
-            startBtn.click(); // 開始ボタンをプログラム的にクリック
-          }
-          event.preventDefault(); // デフォルト動作（フォーム送信など）をキャンセル
-          break;
-
-        case 'ArrowRight':
-          // 右矢印キーでスピードアップ
-          slider.value = parseInt(slider.value) + 1;
-          // 'input'イベントを発生させて、スライダーを動かした時と同じ処理を起動
-          slider.dispatchEvent(new Event('input')); 
-          event.preventDefault(); // ページのスクロールなどをキャンセル
-          break;
-
-        case 'ArrowLeft':
-          // 左矢印キーでスピードダウン
-          slider.value = parseInt(slider.value) - 1;
-          slider.dispatchEvent(new Event('input'));
-          event.preventDefault();
-          break;
-      }
-    });
-    // ▲▲▲ ここまで追加 ▲▲▲
-
-    window.addEventListener("resize", () => {
-      const ballWidth = 50;
-      if (!animationId) {
-        position = (window.innerWidth - ballWidth) / 2;
-      } else {
-        if (position + ballWidth > window.innerWidth) {
-          position = window.innerWidth - ballWidth;
-        }
-      }
-      ball.style.left = position + 'px';
-    });
+    window.addEventListener("resize", () => { const ballWidth = 50; if (!animationId) { position = (window.innerWidth - ballWidth) / 2; } else { if (position + ballWidth > window.innerWidth) { position = window.innerWidth - ballWidth; } } ball.style.left = position + 'px'; });
   </script>
 </body>
 </html>
