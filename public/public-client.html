@@ -138,7 +138,7 @@
       function populateColorSelect(selectElem, colorList) { if (!selectElem) return; colorList.forEach(color => { const option = document.createElement("option"); option.value = color; option.textContent = `⬛ ${color}`; option.style.backgroundColor = color; option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff"; selectElem.appendChild(option); }); }
       function getContrastYIQ(hexcolor) { hexcolor = hexcolor.replace("#", ""); const r = parseInt(hexcolor.substr(0,2),16); const g = parseInt(hexcolor.substr(2,2),16); const b = parseInt(hexcolor.substr(4,2),16); const yiq = ((r*299)+(g*587)+(b*114))/1000; return (yiq >= 128) ? 'black' : 'white'; }
       populateColorSelect(clientBallColorSelect, ballColors);
-      clientBallColorSelect.value = "#FFB3BF";
+      clientBallColorSelect.value = "#FFFFFF";
       window.addEventListener("resize", () => { const screen = { width: window.innerWidth, height: window.innerHeight }; if (!animationId) { position = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 }; ball.style.left = position.x + 'px'; ball.style.top = position.y + 'px'; } });
     });
   </script>
