@@ -134,7 +134,7 @@
       });
       // ▲▲▲ ここまで修正 ▲▲▲
       
-      const ballColors = [ "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#FA8072", "#FFFF00", "#800080", "#008000", "#9ACD32", "#00FFFF", "#7FFFD4", "#0000FF" ];
+      const ballColors = [ "#FFFFFF", "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "6897CC", "#CC6B68", "#68CC9D", "#4E7199", "#99514E", "#4E9967", "#FF0000", "#000000" ];
       function populateColorSelect(selectElem, colorList) { if (!selectElem) return; colorList.forEach(color => { const option = document.createElement("option"); option.value = color; option.textContent = `⬛ ${color}`; option.style.backgroundColor = color; option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff"; selectElem.appendChild(option); }); }
       function getContrastYIQ(hexcolor) { hexcolor = hexcolor.replace("#", ""); const r = parseInt(hexcolor.substr(0,2),16); const g = parseInt(hexcolor.substr(2,2),16); const b = parseInt(hexcolor.substr(4,2),16); const yiq = ((r*299)+(g*587)+(b*114))/1000; return (yiq >= 128) ? 'black' : 'white'; }
       populateColorSelect(clientBallColorSelect, ballColors);
