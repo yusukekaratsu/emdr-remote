@@ -3,11 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <title>EMDR Client</title>
-  <style>/* ... スタイルは変更なし ... */</style>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
   <style>
     html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background-color: #000000; font-family: sans-serif; }
-    #ball { width: 50px; height: 50px; border-radius: 50%; position: absolute; top: 50%; transform: translateY(-50%); background-color: #FFB3BF; }
+    #ball { width: 50px; height: 50px; border-radius: 50%; position: absolute; background-color: #FFB3BF; }
     #colorChooser { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); background-color: rgba(255, 255, 255, 0.95); padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); text-align: center; z-index: 10; }
     #colorChooser label { font-size: 18px; color: #333; }
     #colorChooser select { margin-top: 10px; padding: 5px; font-size: 14px; min-width: 150px; }
@@ -23,113 +21,122 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const socket = io();
-    const ball = document.getElementById("ball");
-    const colorChooser = document.getElementById("colorChooser");
-    const clientBallColor = document.getElementById("clientBallColor");
+    document.addEventListener('DOMContentLoaded', () => {
+      const socket = io();
+      const ball = document.getElementById("ball");
+      const colorChooser = document.getElementById("colorChooser");
+      const clientBallColorSelect = document.getElementById("clientBallColor");
 
-    let position = (window.innerWidth - 50) / 2;
-    ball.style.left = position + "px";
+      // --- 変数の初期化 ---
+      const ballSize = { width: 50, height: 50 };
+      let position = { 
+        x: (window.innerWidth - ballSize.width) / 2, 
+        y: (window.innerHeight - ballSize.height) / 2 
+      };
+      ball.style.left = position.x + "px";
+      ball.style.top = position.y + "px";
 
-    let direction = 1;
-    let speed = 5;
-    let animationId = null;
+      let direction = { x: 1, y: 0 };
+      let speed = 5;
+      let animationId = null;
+      let movePattern = 'horizontal';
 
-    // ▼ここから追加▼: 停止処理用の変数を復活
-    let isStopping = false;
-    let stopProgress = 0;
-    const stopDuration = 120; // 減速にかかる時間（フレーム数）。約2秒
-    let initialSpeed = speed;
-    // ▲ここまで追加▲
+      let isStopping = false;
+      let stopProgress = 0;
+      const stopDuration = 120;
+      let initialSpeed = speed;
 
-    const ballColors = [ "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#FA8072", "#FFFF00", "#800080", "#008000", "#9ACD32", "#00FFFF", "#7FFFD4", "#0000FF" ];
-    function populateColorSelect(selectElem, colorList) { colorList.forEach(color => { const option = document.createElement("option"); option.value = color; option.textContent = `⬛ ${color}`; option.style.backgroundColor = color; option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff"; selectElem.appendChild(option); }); }
-    function getContrastYIQ(hexcolor) { hexcolor = hexcolor.replace("#", ""); const r = parseInt(hexcolor.substr(0,2),16); const g = parseInt(hexcolor.substr(2,2),16); const b = parseInt(hexcolor.substr(4,2),16); const yiq = ((r*299)+(g*587)+(b*114))/1000; return (yiq >= 128) ? 'black' : 'white'; }
-    populateColorSelect(clientBallColor, ballColors);
-    clientBallColor.value = "#FFB3BF";
-    clientBallColor.addEventListener("change", () => { const newColor = clientBallColor.value; ball.style.backgroundColor = newColor; socket.emit("ball-control", { type: "ballColor", value: newColor }); });
+      const angle = 30;
+      const angleRad = angle * Math.PI / 180;
+      const dirX = Math.cos(angleRad);
+      const dirY = Math.sin(angleRad);
 
-    // ▼ここから修正▼: ボールの移動ロジックを全面的に書き換え
-// (control.html の <script> タグ内)
-
-// (client.html の <script> タグ内)
-
-// ▼▼▼ この moveBall 関数をまるごと置き換えてください ▼▼▼
-function moveBall() {
-  const ballWidth = 50;
-  const screenWidth = window.innerWidth;
-
-  if (isStopping) {
-    const center = (screenWidth - ballWidth) / 2;
-    stopProgress += 1 / stopDuration;
-
-    if (stopProgress >= 1) {
-      // 完全に停止
-      position = center;
-      ball.style.left = position + "px"; // 最終位置を反映
-      cancelAnimationFrame(animationId);
-      animationId = null;
-      isStopping = false;
-      return; // ★★★★★ これが重要！ここで関数を終了させる
-    } else {
-      // イージングで減速しながら中央へ
-      const currentSpeed = initialSpeed * Math.pow(1 - stopProgress, 2);
-      const delta = center - position;
-      const moveDirection = delta > 0 ? 1 : -1;
-      position += moveDirection * Math.min(Math.abs(delta), currentSpeed);
-    }
-  } else {
-    // 通常の往復運動
-    position += direction * speed;
-    if (position <= 0 || position + ballWidth >= screenWidth) {
-      direction *= -1;
-      position = Math.max(0, Math.min(position, screenWidth - ballWidth));
-    }
-  }
-
-  ball.style.left = position + "px";
-  // アニメーションの再開は、関数の最後に1回だけ記述するシンプルな形に戻す
-  animationId = requestAnimationFrame(moveBall);
-}
-
-    // ▲ここまで修正▲
-    
-    // ▼ここから修正▼: 停止フラグを立てる処理に変更
-    function stopBall() {
-      if (animationId && !isStopping) {
-        isStopping = true;
-        stopProgress = 0;
-        initialSpeed = speed; // 停止開始時の速度を記録
-      }
-    }
-    // ▲ここまで修正▲
-
-    socket.on("ball-control", (data) => {
-      // ▼ここから修正▼: スタート時に停止フラグをリセット
-      if (data.type === "start") {
-        isStopping = false; // 停止シーケンスをキャンセル
-        if (colorChooser) {
-          colorChooser.style.display = "none";
+      // --- 関数 ---
+      function updateDirection() {
+        switch (movePattern) {
+          case 'horizontal':
+            direction = { x: 1, y: 0 };
+            break;
+          case 'diagonal1':
+            direction = { x: dirX, y: dirY };
+            break;
+          case 'diagonal2':
+            direction = { x: -dirX, y: dirY };
+            break;
         }
-        if (!animationId) {
-          moveBall();
-        }
-      // ▲ここまで修正▲
-      } else if (data.type === "stop") {
-        stopBall();
-      } else if (data.type === "speed") {
-        speed = data.value;
-      } else if (data.type === "ballColor") {
-        const color = data.value;
-        ball.style.backgroundColor = color;
-        clientBallColor.value = color;
-      } else if (data.type === "bgColor") {
-        document.body.style.backgroundColor = data.value;
       }
+
+      function moveBall() {
+        const screen = { width: window.innerWidth, height: window.innerHeight };
+        if (isStopping) {
+          const center = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 };
+          stopProgress += 1 / stopDuration;
+          if (stopProgress >= 1) {
+            position = center;
+            cancelAnimationFrame(animationId);
+            animationId = null;
+            isStopping = false;
+          } else {
+            const ease = Math.pow(1 - stopProgress, 2);
+            position.x += (center.x - position.x) * (1 - ease);
+            position.y += (center.y - position.y) * (1 - ease);
+          }
+        } else {
+          position.x += direction.x * speed;
+          position.y += direction.y * speed;
+          if (position.x <= 0 || position.x + ballSize.width >= screen.width) {
+            direction.x *= -1;
+            position.x = Math.max(0, Math.min(position.x, screen.width - ballSize.width));
+          }
+          if (position.y <= 0 || position.y + ballSize.height >= screen.height) {
+            direction.y *= -1;
+            position.y = Math.max(0, Math.min(position.y, screen.height - ballSize.height));
+          }
+        }
+        ball.style.left = position.x + "px";
+        ball.style.top = position.y + "px";
+        if (animationId) animationId = requestAnimationFrame(moveBall);
+      }
+      
+      function stopBall() {
+        if (animationId && !isStopping) {
+          isStopping = true;
+          stopProgress = 0;
+          initialSpeed = speed;
+        }
+      }
+
+      // --- ソケット通信 ---
+      socket.on("ball-control", (data) => {
+        switch (data.type) {
+          case "start":
+            isStopping = false;
+            if (colorChooser) { colorChooser.style.display = "none"; }
+            if (!animationId) { updateDirection(); animationId = requestAnimationFrame(moveBall); }
+            break;
+          case "stop": stopBall(); break;
+          case "movePattern":
+            movePattern = data.value;
+            updateDirection();
+            break;
+          // ... 他のケース ...
+          case "speed": speed = data.value; break;
+          case "ballColor": ball.style.backgroundColor = data.value; clientBallColorSelect.value = data.value; break;
+          case "bgColor": document.body.style.backgroundColor = data.value; break;
+        }
+      });
+      
+      // ... 色選択肢の生成、イベントリスナー、リサイズ処理など ...
+      function populateColorSelect(selectElem, colorList) { /* ... */ }
+      function getContrastYIQ(hexcolor) { /* ... */ }
+      clientBallColorSelect.addEventListener("change", () => { const newColor = clientBallColorSelect.value; ball.style.backgroundColor = newColor; socket.emit("ball-control", { type: "ballColor", value: newColor }); });
+      window.addEventListener("resize", () => { const screen = { width: window.innerWidth, height: window.innerHeight }; if (!animationId) { position = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 }; ball.style.left = position.x + 'px'; ball.style.top = position.y + 'px'; } });
+      const ballColors = [ "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#FA8072", "#FFFF00", "#800080", "#008000", "#9ACD32", "#00FFFF", "#7FFFD4", "#0000FF" ];
+      function populateColorSelect(selectElem, colorList) { if (!selectElem) return; colorList.forEach(color => { const option = document.createElement("option"); option.value = color; option.textContent = `⬛ ${color}`; option.style.backgroundColor = color; option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff"; selectElem.appendChild(option); }); }
+      function getContrastYIQ(hexcolor) { hexcolor = hexcolor.replace("#", ""); const r = parseInt(hexcolor.substr(0,2),16); const g = parseInt(hexcolor.substr(2,2),16); const b = parseInt(hexcolor.substr(4,2),16); const yiq = ((r*299)+(g*587)+(b*114))/1000; return (yiq >= 128) ? 'black' : 'white'; }
+      populateColorSelect(clientBallColorSelect, ballColors);
+      clientBallColorSelect.value = "#FFB3BF";
     });
-
-    window.addEventListener("resize", () => { /* ...変更なし... */ });
-    window.addEventListener("resize", () => { const ballWidth = 50; if (!animationId) { position = (window.innerWidth - ballWidth) / 2; } else { if (position + ballWidth > window.innerWidth) { position = window.innerWidth - ballWidth; } } ball.style.left = position + 'px'; });
   </script>
 </body>
 </html>
