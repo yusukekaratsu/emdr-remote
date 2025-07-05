@@ -79,39 +79,74 @@
       const stopDuration = 120;
       let initialSpeed = speed;
 
-      // ▼▼▼ 角度を30度から15度に変更 ▼▼▼
       const angle = 15;
-      // ▲▲▲ ここまで ▲▲▲
-      
       const angleRad = angle * Math.PI / 180;
       const dirX = Math.cos(angleRad);
       const dirY = Math.sin(angleRad);
       
-      function updateDirection() { /* ...（この部分は変更なし）... */ }
-      function moveBall() { /* ...（この部分は変更なし）... */ }
-      function stopBall() { /* ...（この部分は変更なし）... */ }
-      function updateDirection() { switch (movePattern) { case 'horizontal': direction = { x: 1, y: 0 }; break; case 'diagonal1': direction = { x: dirX, y: dirY }; break; case 'diagonal2': direction = { x: -dirX, y: dirY }; break; } }
-      function moveBall() { const screen = { width: window.innerWidth, height: window.innerHeight }; if (isStopping) { const center = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 }; stopProgress += 1 / stopDuration; if (stopProgress >= 1) { position = center; cancelAnimationFrame(animationId); animationId = null; isStopping = false; } else { const ease = Math.pow(1 - stopProgress, 2); position.x += (center.x - position.x) * (1 - ease); position.y += (center.y - position.y) * (1 - ease); } } else { position.x += direction.x * speed; position.y += direction.y * speed; if (position.x <= 0 || position.x + ballSize.width >= screen.width) { direction.x *= -1; position.x = Math.max(0, Math.min(position.x, screen.width - ballSize.width)); } if (position.y <= 0 || position.y + ballSize.height >= screen.height) { direction.y *= -1; position.y = Math.max(0, Math.min(position.y, screen.height - ballSize.height)); } } ball.style.left = position.x + "px"; ball.style.top = position.y + "px"; if(animationId) animationId = requestAnimationFrame(moveBall); }
+      function updateDirection() {
+          switch (movePattern) {
+          case 'horizontal': direction = { x: 1, y: 0 }; break;
+          case 'diagonal1': direction = { x: dirX, y: dirY }; break;
+          case 'diagonal2': direction = { x: -dirX, y: dirY }; break;
+        }
+      }
+
+      // ▼▼▼ この部分を修正 ▼▼▼
+      function moveBall() {
+        const screen = { width: window.innerWidth, height: window.innerHeight };
+        if (isStopping) {
+          const center = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 };
+          stopProgress += 1 / stopDuration;
+          if (stopProgress >= 1) {
+            position = center;
+            cancelAnimationFrame(animationId);
+            animationId = null;
+            isStopping = false;
+          } else {
+            const ease = Math.pow(1 - stopProgress, 2);
+            position.x += (center.x - position.x) * (1 - ease);
+            position.y += (center.y - position.y) * (1 - ease);
+          }
+        } else {
+          position.x += direction.x * speed;
+          position.y += direction.y * speed;
+
+          // パターンに応じて衝突判定のロジックを切り替え
+          if (movePattern === 'horizontal') {
+            // 水平の場合：X軸のみ反転
+            if (position.x <= 0 || position.x + ballSize.width >= screen.width) {
+              direction.x *= -1;
+            }
+          } else {
+            // 斜めの場合：いずれかの壁に当たったら、XとYの両方を反転
+            if (position.x <= 0 || position.x + ballSize.width >= screen.width || position.y <= 0 || position.y + ballSize.height >= screen.height) {
+              direction.x *= -1;
+              direction.y *= -1;
+            }
+          }
+          // ボールが画面外に出ないように補正
+          position.x = Math.max(0, Math.min(position.x, screen.width - ballSize.width));
+          position.y = Math.max(0, Math.min(position.y, screen.height - ballSize.height));
+        }
+        
+        ball.style.left = position.x + "px";
+        ball.style.top = position.y + "px";
+        if(animationId) animationId = requestAnimationFrame(moveBall);
+      }
+      // ▲▲▲ ここまで ▲▲▲
+      
+      function stopBall() { /* ...（変更なし）... */ }
       function stopBall() { if (animationId && !isStopping) { isStopping = true; stopProgress = 0; initialSpeed = speed; } }
 
+      // ... 他のイベントリスナーやsocket通信のコードは変更なし ...
       startBtn.addEventListener("click", () => { isStopping = false; if (!animationId) { updateDirection(); animationId = requestAnimationFrame(moveBall); socket.emit("ball-control", { type: "start" }); } });
       stopBtn.addEventListener("click", () => { stopBall(); socket.emit("ball-control", { type: "stop" }); });
       movePatternRadios.forEach(radio => { radio.addEventListener('change', () => { movePattern = radio.value; updateDirection(); socket.emit("ball-control", { type: "movePattern", value: movePattern }); }); });
       slider.addEventListener("input", () => { speed = parseInt(slider.value); speedDisplay.textContent = speed; socket.emit("ball-control", { type: "speed", value: speed }); });
       ballColorSelect.addEventListener("change", () => { const color = ballColorSelect.value; ball.style.backgroundColor = color; socket.emit("ball-control", { type: "ballColor", value: color }); });
       bgColorSelect.addEventListener("change", () => { const color = bgColorSelect.value; document.body.style.backgroundColor = color; socket.emit("ball-control", { type: "bgColor", value: color }); });
-      
-      socket.on("ball-control", (data) => {
-          switch (data.type) {
-          case "start": isStopping = false; if (!animationId) { updateDirection(); animationId = requestAnimationFrame(moveBall); } break;
-          case "stop": stopBall(); break;
-          case "movePattern": movePattern = data.value; document.querySelector(`input[name="movePattern"][value="${movePattern}"]`).checked = true; updateDirection(); break;
-          case "speed": speed = data.value; slider.value = speed; speedDisplay.textContent = speed; break;
-          case "ballColor": ball.style.backgroundColor = data.value; ballColorSelect.value = data.value; break;
-          case "bgColor": document.body.style.backgroundColor = data.value; bgColorSelect.value = data.value; break;
-        }
-      });
-      
+      socket.on("ball-control", (data) => { switch (data.type) { case "start": isStopping = false; if (!animationId) { updateDirection(); animationId = requestAnimationFrame(moveBall); } break; case "stop": stopBall(); break; case "movePattern": movePattern = data.value; document.querySelector(`input[name="movePattern"][value="${movePattern}"]`).checked = true; updateDirection(); break; case "speed": speed = data.value; slider.value = speed; speedDisplay.textContent = speed; break; case "ballColor": ball.style.backgroundColor = data.value; ballColorSelect.value = data.value; break; case "bgColor": document.body.style.backgroundColor = data.value; bgColorSelect.value = data.value; break; } });
       function populateColorSelect(selectElem, colorList) { if (!selectElem) return; colorList.forEach(color => { const option = document.createElement("option"); option.value = color; option.textContent = `⬛ ${color}`; option.style.backgroundColor = color; option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff"; selectElem.appendChild(option); }); }
       function getContrastYIQ(hexcolor) { hexcolor = hexcolor.replace("#", ""); const r = parseInt(hexcolor.substr(0,2),16); const g = parseInt(hexcolor.substr(2,2),16); const b = parseInt(hexcolor.substr(4,2),16); const yiq = ((r*299)+(g*587)+(b*114))/1000; return (yiq >= 128) ? 'black' : 'white'; }
       const ballColors = [ "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#FA8072", "#FFFF00", "#800080", "#008000", "#9ACD32", "#00FFFF", "#7FFFD4", "#0000FF" ];
@@ -120,7 +155,6 @@
       populateColorSelect(bgColorSelect, bgColors);
       ballColorSelect.value = "#FFB3BF";
       bgColorSelect.value = "#000000";
-
       window.addEventListener('keydown', (event) => { switch (event.key) { case 'Enter': if (animationId) { stopBtn.click(); } else { startBtn.click(); } event.preventDefault(); break; case 'ArrowRight': slider.value = parseInt(slider.value) + 1; slider.dispatchEvent(new Event('input')); event.preventDefault(); break; case 'ArrowLeft': slider.value = parseInt(slider.value) - 1; slider.dispatchEvent(new Event('input')); event.preventDefault(); break; } });
       window.addEventListener("resize", () => { const screen = { width: window.innerWidth, height: window.innerHeight }; if (!animationId) { position = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 }; ball.style.left = position.x + 'px'; ball.style.top = position.y + 'px'; } });
     });
