@@ -5,7 +5,7 @@
   <title>EMDR Client</title>
   <style>
     html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background-color: #000000; font-family: sans-serif; }
-    #ball { width: 50px; height: 50px; border-radius: 50%; position: absolute; background-color: #FFB3BF; }
+    #ball { width: 50px; height: 50px; border-radius: 50%; position: absolute; background-color: #FFFFFF; }
     #colorChooser { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); background-color: rgba(255, 255, 255, 0.95); padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); text-align: center; z-index: 10; }
     #colorChooser label { font-size: 18px; color: #333; }
     #colorChooser select { margin-top: 10px; padding: 5px; font-size: 14px; min-width: 150px; }
@@ -27,7 +27,6 @@
       const colorChooser = document.getElementById("colorChooser");
       const clientBallColorSelect = document.getElementById("clientBallColor");
 
-      // --- 変数定義 ---
       const ballSize = { width: 50, height: 50 };
       let position = { x: (window.innerWidth - ballSize.width) / 2, y: (window.innerHeight - ballSize.height) / 2 };
       ball.style.left = position.x + "px"; ball.style.top = position.y + "px";
@@ -37,108 +36,50 @@
       let movePattern = 'horizontal';
       let isStopping = false;
       let stopProgress = 0;
-      const stopDuration = 500;
+      // ▼▼▼ ① 減速時間を変更 ▼▼▼
+      const stopDuration = 600;
+      // ▲▲▲ ここまで ▲▲▲
       let initialSpeed = speed;
       const angle = 15;
       const angleRad = angle * Math.PI / 180;
       const dirX = Math.cos(angleRad);
       const dirY = Math.sin(angleRad);
       
-      // --- 音声に関する変数 ---
       let audioContext;
       let panner;
       let panDirection = -1;
       let isAudioEnabled = false;
       let isAudioInitialized = false;
 
-      // --- 関数定義 ---
-      function initAudio() {
-        if (isAudioInitialized) return;
-        try {
-          audioContext = new (window.AudioContext || window.webkitAudioContext)();
-          panner = audioContext.createStereoPanner();
-          panner.connect(audioContext.destination);
-          isAudioInitialized = true;
-        } catch(e) {
-          console.error("Web Audio API is not supported in this browser.");
-        }
-      }
-
-      function playCollisionSound() {
-        if (!isAudioEnabled || !isAudioInitialized) return;
-        if (audioContext.state === 'suspended') { audioContext.resume(); }
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
-        oscillator.connect(gainNode).connect(panner);
-        panner.pan.setValueAtTime(panDirection, audioContext.currentTime);
-        gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.1);
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.1);
-        panDirection *= -1;
-      }
-
-      function updateDirection() { /*...変更なし...*/ }
-      function moveBall() { /*...変更なし...*/ }
-      function stopBall() { /*...変更なし...*/ }
+      function initAudio() { if (isAudioInitialized) return; try { audioContext = new (window.AudioContext || window.webkitAudioContext)(); panner = audioContext.createStereoPanner(); panner.connect(audioContext.destination); isAudioInitialized = true; } catch(e) { console.error("Web Audio API is not supported in this browser."); } }
+      function playCollisionSound() { if (!isAudioEnabled || !isAudioInitialized) return; if (audioContext.state === 'suspended') { audioContext.resume(); } const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(440, audioContext.currentTime); oscillator.connect(gainNode).connect(panner); panner.pan.setValueAtTime(panDirection, audioContext.currentTime); gainNode.gain.setValueAtTime(0.5, audioContext.currentTime); gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.1); oscillator.start(audioContext.currentTime); oscillator.stop(audioContext.currentTime + 0.1); panDirection *= -1; }
       function updateDirection() { switch (movePattern) { case 'horizontal': direction = { x: 1, y: 0 }; break; case 'diagonal1': direction = { x: dirX, y: dirY }; break; case 'diagonal2': direction = { x: -dirX, y: dirY }; break; } }
       function moveBall() { const screen = { width: window.innerWidth, height: window.innerHeight }; if (isStopping) { const center = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 }; stopProgress += 1 / stopDuration; if (stopProgress >= 1) { position = center; cancelAnimationFrame(animationId); animationId = null; isStopping = false; } else { const ease = Math.pow(1 - stopProgress, 2); position.x += (center.x - position.x) * (1 - ease); position.y += (center.y - position.y) * (1 - ease); } } else { position.x += direction.x * speed; position.y += direction.y * speed; if (movePattern === 'horizontal') { if (position.x <= 0 || position.x + ballSize.width >= screen.width) { direction.x *= -1; playCollisionSound(); } } else { if (position.x <= 0 || position.x + ballSize.width >= screen.width || position.y <= 0 || position.y + ballSize.height >= screen.height) { direction.x *= -1; direction.y *= -1; playCollisionSound(); } } position.x = Math.max(0, Math.min(position.x, screen.width - ballSize.width)); position.y = Math.max(0, Math.min(position.y, screen.height - ballSize.height)); } ball.style.left = position.x + "px"; ball.style.top = position.y + "px"; if (animationId) animationId = requestAnimationFrame(moveBall); }
       function stopBall() { if (animationId && !isStopping) { isStopping = true; stopProgress = 0; initialSpeed = speed; } }
 
-      // ▼▼▼ ここから修正 ▼▼▼
-      // クライアントが最初に色を選択した時に、音声再生の準備をする
-      clientBallColorSelect.addEventListener("change", () => {
-        // この時点でユーザー操作があったことが確定
-        initAudio();
-        // もしAudioContextが一時停止状態なら、再開を試みる
-        if (audioContext && audioContext.state === 'suspended') {
-            audioContext.resume();
-        }
-        
-        // 元の色変更の処理
-        const newColor = clientBallColorSelect.value;
-        ball.style.backgroundColor = newColor;
-        socket.emit("ball-control", { type: "ballColor", value: newColor });
-      });
+      clientBallColorSelect.addEventListener("change", () => { initAudio(); if (audioContext && audioContext.state === 'suspended') { audioContext.resume(); } const newColor = clientBallColorSelect.value; ball.style.backgroundColor = newColor; socket.emit("ball-control", { type: "ballColor", value: newColor }); });
 
       socket.on("ball-control", (data) => {
         switch (data.type) {
-          case "start":
-            isStopping = false;
-            if (colorChooser) { colorChooser.style.display = "none"; }
-            // スタート時にも念のため音声再生の再開を試みる
-            if (isAudioEnabled && isAudioInitialized && audioContext.state === 'suspended') {
-                audioContext.resume();
-            }
-            if (!animationId) {
-              updateDirection();
-              animationId = requestAnimationFrame(moveBall);
-            }
-            break;
-          case "audioToggle":
-            isAudioEnabled = data.value;
-            // セラピスト側でトグルがONにされたら、クライアント側でも音声の初期化をしておく
-            if (isAudioEnabled) {
-              initAudio();
-            }
-            break;
-          // ...他のcaseは変更なし...
+          case "start": isStopping = false; if (colorChooser) { colorChooser.style.display = "none"; } if (isAudioEnabled && isAudioInitialized && audioContext.state === 'suspended') { audioContext.resume(); } if (!animationId) { updateDirection(); animationId = requestAnimationFrame(moveBall); } break;
           case "stop": stopBall(); break;
+          case "audioToggle": isAudioEnabled = data.value; if (isAudioEnabled) { initAudio(); } break;
           case "movePattern": movePattern = data.value; updateDirection(); break;
           case "speed": speed = data.value; break;
           case "ballColor": ball.style.backgroundColor = data.value; clientBallColorSelect.value = data.value; break;
           case "bgColor": document.body.style.backgroundColor = data.value; break;
         }
       });
-      // ▲▲▲ ここまで修正 ▲▲▲
       
-      const ballColors = [ "#FFFFFF", "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "6897CC", "#CC6B68", "#68CC9D", "#4E7199", "#99514E", "#4E9967", "#FF0000", "#000000" ];
+      // ▼▼▼ ④ ボールの色を変更 ▼▼▼
+      const ballColors = [ "#FFFFFF", "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#8AB5E6", "#E68D8A", "#B5E68A", "#4E7199", "#99514E", "#4E9967", "#FF0000", "#000000" ];
+      // ▲▲▲ ここまで ▲▲▲
       function populateColorSelect(selectElem, colorList) { if (!selectElem) return; colorList.forEach(color => { const option = document.createElement("option"); option.value = color; option.textContent = `⬛ ${color}`; option.style.backgroundColor = color; option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff"; selectElem.appendChild(option); }); }
       function getContrastYIQ(hexcolor) { hexcolor = hexcolor.replace("#", ""); const r = parseInt(hexcolor.substr(0,2),16); const g = parseInt(hexcolor.substr(2,2),16); const b = parseInt(hexcolor.substr(4,2),16); const yiq = ((r*299)+(g*587)+(b*114))/1000; return (yiq >= 128) ? 'black' : 'white'; }
       populateColorSelect(clientBallColorSelect, ballColors);
-      clientBallColorSelect.value = "#FFFFFF";
+      // 初期値を新しいリストの先頭に変更
+      clientBallColorSelect.value = "#FFFFFF"; 
+      
       window.addEventListener("resize", () => { const screen = { width: window.innerWidth, height: window.innerHeight }; if (!animationId) { position = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 }; ball.style.left = position.x + 'px'; ball.style.top = position.y + 'px'; } });
     });
   </script>
