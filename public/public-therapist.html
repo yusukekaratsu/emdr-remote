@@ -19,18 +19,18 @@
     #pattern-selector legend { padding: 0 10px; font-size: 14px; text-align: center; }
     #pattern-selector div { display: flex; justify-content: center; gap: 20px; }
     #pattern-selector label { cursor: pointer; margin-left: 5px; }
-    /* ▼▼▼ ここから追加 ▼▼▼ */
     .option-toggle { margin-top: 15px; font-size: 14px; }
     .option-toggle label { cursor: pointer; margin-left: 5px; }
-    /* ▲▲▲ ここまで追加 ▲▲▲ */
   </style>
 </head>
 <body style="background-color: #000000;">
 
   <div id="controlPanel">
     <h2>セラピスト操作</h2>
-    <label for="slider">速度: <span id="speedDisplay">5</span></label><br />
-    <input type="range" id="slider" min="1" max="100" value="5" />
+    <!-- ▼▼▼ ここを修正 ▼▼▼ -->
+    <label for="slider">速度: <span id="speedDisplay">1</span></label><br />
+    <input type="range" id="slider" min="1" max="100" value="1" />
+    <!-- ▲▲▲ ここまで修正 ▲▲▲ -->
     <div class="button-group">
       <button id="startBtn">スタート</button>
       <button id="stopBtn">ストップ</button>
@@ -43,12 +43,10 @@
         <span><input type="radio" id="moveDiagonal2" name="movePattern" value="diagonal2"><label for="moveDiagonal2">斜め(右上↔左下)</label></span>
       </div>
     </fieldset>
-    <!-- ▼▼▼ ここから追加 ▼▼▼ -->
     <div class="option-toggle">
         <input type="checkbox" id="audioToggle">
         <label for="audioToggle">端で音を鳴らす</label>
     </div>
-    <!-- ▲▲▲ ここまで追加 ▲▲▲ -->
     <div class="color-controls-container">
       <div class="color-control-item">
         <label for="ballColor">ボールの色:</label><br />
@@ -65,9 +63,9 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
+    // JavaScript部分は変更ありません
     document.addEventListener('DOMContentLoaded', () => {
       const socket = io();
-      // ...要素取得...
       const ball = document.getElementById("ball");
       const slider = document.getElementById("slider");
       const speedDisplay = document.getElementById("speedDisplay");
@@ -77,96 +75,48 @@
       const bgColorSelect = document.getElementById("bgColor");
       const movePatternRadios = document.querySelectorAll('input[name="movePattern"]');
       const audioToggle = document.getElementById('audioToggle');
-
-      // --- 動きに関する変数 ---
+      let speed;
+      function calculateLinearSpeed(sliderValue) {
+        const MIN_BALL_SPEED = 5;
+        const MAX_BALL_SPEED = 40;
+        const normalizedValue = (sliderValue - 1) / 99;
+        const finalSpeed = MIN_BALL_SPEED + normalizedValue * (MAX_BALL_SPEED - MIN_BALL_SPEED);
+        return finalSpeed;
+      }
       const ballSize = { width: 50, height: 50 };
       let position = { x: (window.innerWidth - ballSize.width) / 2, y: (window.innerHeight - ballSize.height) / 2 };
       ball.style.left = position.x + "px"; ball.style.top = position.y + "px";
       let direction = { x: 1, y: 0 };
-      let speed = parseInt(slider.value);
       let animationId = null;
       let movePattern = 'horizontal';
       let isStopping = false;
       let stopProgress = 0;
       const stopDuration = 120;
-      let initialSpeed = speed;
+      let initialSpeed;
       const angle = 15;
       const angleRad = angle * Math.PI / 180;
       const dirX = Math.cos(angleRad);
       const dirY = Math.sin(angleRad);
-
-      // --- 音声に関する変数 ---
       let audioContext;
       let panner;
-      let panDirection = -1; // -1:左, 1:右
+      let panDirection = -1;
       let isAudioEnabled = false;
       let isAudioInitialized = false;
-
-      // --- 関数定義 ---
-      function initAudio() {
-        if (isAudioInitialized) return;
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        panner = audioContext.createStereoPanner();
-        panner.connect(audioContext.destination);
-        isAudioInitialized = true;
-      }
-
-      function playCollisionSound() {
-        if (!isAudioEnabled || !isAudioInitialized) return;
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
-        oscillator.connect(gainNode).connect(panner);
-        panner.pan.setValueAtTime(panDirection, audioContext.currentTime);
-        gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.1);
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.1);
-        panDirection *= -1;
-      }
-      
-      function updateDirection() { /*...変更なし...*/ }
-      function moveBall() { /*...衝突検知部分にplayCollisionSound()を追加...*/ }
-      function stopBall() { /*...変更なし...*/ }
-
+      speed = calculateLinearSpeed(parseInt(slider.value));
+      initialSpeed = speed;
+      function initAudio() { if (isAudioInitialized) return; audioContext = new (window.AudioContext || window.webkitAudioContext)(); panner = audioContext.createStereoPanner(); panner.connect(audioContext.destination); isAudioInitialized = true; }
+      function playCollisionSound() { if (!isAudioEnabled || !isAudioInitialized) return; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(440, audioContext.currentTime); oscillator.connect(gainNode).connect(panner); panner.pan.setValueAtTime(panDirection, audioContext.currentTime); gainNode.gain.setValueAtTime(0.5, audioContext.currentTime); gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.1); oscillator.start(audioContext.currentTime); oscillator.stop(audioContext.currentTime + 0.1); panDirection *= -1; }
       function updateDirection() { switch (movePattern) { case 'horizontal': direction = { x: 1, y: 0 }; break; case 'diagonal1': direction = { x: dirX, y: dirY }; break; case 'diagonal2': direction = { x: -dirX, y: dirY }; break; } }
       function moveBall() { const screen = { width: window.innerWidth, height: window.innerHeight }; if (isStopping) { const center = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 }; stopProgress += 1 / stopDuration; if (stopProgress >= 1) { position = center; cancelAnimationFrame(animationId); animationId = null; isStopping = false; } else { const ease = Math.pow(1 - stopProgress, 2); position.x += (center.x - position.x) * (1 - ease); position.y += (center.y - position.y) * (1 - ease); } } else { position.x += direction.x * speed; position.y += direction.y * speed; if (movePattern === 'horizontal') { if (position.x <= 0 || position.x + ballSize.width >= screen.width) { direction.x *= -1; playCollisionSound(); } } else { if (position.x <= 0 || position.x + ballSize.width >= screen.width || position.y <= 0 || position.y + ballSize.height >= screen.height) { direction.x *= -1; direction.y *= -1; playCollisionSound(); } } position.x = Math.max(0, Math.min(position.x, screen.width - ballSize.width)); position.y = Math.max(0, Math.min(position.y, screen.height - ballSize.height)); } ball.style.left = position.x + "px"; ball.style.top = position.y + "px"; if(animationId) animationId = requestAnimationFrame(moveBall); }
       function stopBall() { if (animationId && !isStopping) { isStopping = true; stopProgress = 0; initialSpeed = speed; } }
-
-      // --- イベントリスナー ---
-      startBtn.addEventListener("click", () => {
-        if (isAudioEnabled) { initAudio(); audioContext.resume(); }
-        isStopping = false; if (!animationId) { updateDirection(); animationId = requestAnimationFrame(moveBall); socket.emit("ball-control", { type: "start" }); }
-      });
+      startBtn.addEventListener("click", () => { if (isAudioEnabled) { initAudio(); audioContext.resume(); } isStopping = false; if (!animationId) { updateDirection(); animationId = requestAnimationFrame(moveBall); socket.emit("ball-control", { type: "start" }); } });
       stopBtn.addEventListener("click", () => { stopBall(); socket.emit("ball-control", { type: "stop" }); });
-      
-      audioToggle.addEventListener('change', () => {
-        isAudioEnabled = audioToggle.checked;
-        if (isAudioEnabled) { initAudio(); audioContext.resume(); }
-        socket.emit("ball-control", { type: "audioToggle", value: isAudioEnabled });
-      });
-      
-      // ...他のリスナーは変更なし...
+      slider.addEventListener("input", () => { const sliderValue = parseInt(slider.value); speed = calculateLinearSpeed(sliderValue); speedDisplay.textContent = sliderValue; socket.emit("ball-control", { type: "speed", value: speed }); });
+      audioToggle.addEventListener('change', () => { isAudioEnabled = audioToggle.checked; if (isAudioEnabled) { initAudio(); audioContext.resume(); } socket.emit("ball-control", { type: "audioToggle", value: isAudioEnabled }); });
       movePatternRadios.forEach(radio => { radio.addEventListener('change', () => { movePattern = radio.value; updateDirection(); socket.emit("ball-control", { type: "movePattern", value: movePattern }); }); });
-      slider.addEventListener("input", () => { speed = parseInt(slider.value); speedDisplay.textContent = speed; socket.emit("ball-control", { type: "speed", value: speed }); });
       ballColorSelect.addEventListener("change", () => { const color = ballColorSelect.value; ball.style.backgroundColor = color; socket.emit("ball-control", { type: "ballColor", value: color }); });
       bgColorSelect.addEventListener("change", () => { const color = bgColorSelect.value; document.body.style.backgroundColor = color; socket.emit("ball-control", { type: "bgColor", value: color }); });
-      
-      socket.on("ball-control", (data) => {
-        switch (data.type) {
-          case "start": isStopping = false; if (!animationId) { if(isAudioEnabled) {initAudio(); audioContext.resume();} updateDirection(); animationId = requestAnimationFrame(moveBall); } break;
-          case "stop": stopBall(); break;
-          case "audioToggle": isAudioEnabled = data.value; audioToggle.checked = isAudioEnabled; if (isAudioEnabled) { initAudio(); audioContext.resume(); } break;
-          // ...他のcaseは変更なし...
-          case "movePattern": movePattern = data.value; document.querySelector(`input[name="movePattern"][value="${movePattern}"]`).checked = true; updateDirection(); break;
-          case "speed": speed = data.value; slider.value = speed; speedDisplay.textContent = speed; break;
-          case "ballColor": ball.style.backgroundColor = data.value; ballColorSelect.value = data.value; break;
-          case "bgColor": document.body.style.backgroundColor = data.value; bgColorSelect.value = data.value; break;
-        }
-      });
-      
-      // ...色選択肢の生成や他のリスナーは変更なし...
+      socket.on("ball-control", (data) => { switch (data.type) { case "start": isStopping = false; if (!animationId) { if(isAudioEnabled) {initAudio(); audioContext.resume();} updateDirection(); animationId = requestAnimationFrame(moveBall); } break; case "stop": stopBall(); break; case "audioToggle": isAudioEnabled = data.value; audioToggle.checked = isAudioEnabled; if (isAudioEnabled) { initAudio(); } break; case "speed": speed = data.value; break; case "movePattern": movePattern = data.value; document.querySelector(`input[name="movePattern"][value="${movePattern}"]`).checked = true; updateDirection(); break; case "ballColor": ball.style.backgroundColor = data.value; ballColorSelect.value = data.value; break; case "bgColor": document.body.style.backgroundColor = data.value; bgColorSelect.value = data.value; break; } });
       const ballColors = [ "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#FA8072", "#FFFF00", "#800080", "#008000", "#9ACD32", "#00FFFF", "#7FFFD4", "#0000FF" ];
       const bgColors = [ "#FFFFFF", "#FFFAFA", "#F0FFFF", "#FFFFF0", "#C0C0C0", "#000000" ];
       function populateColorSelect(selectElem, colorList) { if (!selectElem) return; colorList.forEach(color => { const option = document.createElement("option"); option.value = color; option.textContent = `⬛ ${color}`; option.style.backgroundColor = color; option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff"; selectElem.appendChild(option); }); }
