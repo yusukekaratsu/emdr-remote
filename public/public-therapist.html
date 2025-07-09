@@ -27,8 +27,8 @@
 
   <div id="controlPanel">
     <h2>セラピスト操作</h2>
-    <label for="slider">速度: <span id="speedDisplay">5</span></label><br />
-    <input type="range" id="slider" min="1" max="100" value="5" />
+    <label for="slider">速度: <span id="speedDisplay">1</span></label><br />
+    <input type="range" id="slider" min="1" max="50" value="5" />
     <div class="button-group">
       <button id="startBtn">スタート</button>
       <button id="stopBtn">ストップ</button>
@@ -85,11 +85,11 @@
       function calculateLinearSpeed(sliderValue) {
         // --- ★★★ ここで初速と最高速を調整します ★★★ ---
         const MIN_BALL_SPEED = 25;  // スライダーが1の時の速度（初速）
-        const MAX_BALL_SPEED = 100; // スライダーが100の時の最高速度
+        const MAX_BALL_SPEED = 70; // スライダーが100の時の最高速度
         // ---------------------------------------------
 
         // スライダーの値を0から1の範囲に変換
-        const normalizedValue = (sliderValue - 1) / 99;
+        const normalizedValue = (sliderValue - 1) / 49;
         
         // 実際の速度範囲にマッピング
         const finalSpeed = MIN_BALL_SPEED + normalizedValue * (MAX_BALL_SPEED - MIN_BALL_SPEED);
@@ -106,7 +106,7 @@
       let movePattern = 'horizontal';
       let isStopping = false;
       let stopProgress = 0;
-      const stopDuration = 360;
+      const stopDuration = 480;
       let initialSpeed;
       const angle = 15;
       const angleRad = angle * Math.PI / 180;
