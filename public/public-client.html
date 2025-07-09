@@ -36,15 +36,13 @@
       let movePattern = 'horizontal';
       let isStopping = false;
       let stopProgress = 0;
-      // ▼▼▼ ① 減速時間を変更 ▼▼▼
       const stopDuration = 600;
-      // ▲▲▲ ここまで ▲▲▲
-      let initialSpeed = speed;
+      let startPosition; // ▼▼▼ 減速開始位置を保存する変数を追加 ▼▼▼
+      
       const angle = 15;
       const angleRad = angle * Math.PI / 180;
       const dirX = Math.cos(angleRad);
       const dirY = Math.sin(angleRad);
-      
       let audioContext;
       let panner;
       let panDirection = -1;
@@ -54,14 +52,60 @@
       function initAudio() { if (isAudioInitialized) return; try { audioContext = new (window.AudioContext || window.webkitAudioContext)(); panner = audioContext.createStereoPanner(); panner.connect(audioContext.destination); isAudioInitialized = true; } catch(e) { console.error("Web Audio API is not supported in this browser."); } }
       function playCollisionSound() { if (!isAudioEnabled || !isAudioInitialized) return; if (audioContext.state === 'suspended') { audioContext.resume(); } const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(440, audioContext.currentTime); oscillator.connect(gainNode).connect(panner); panner.pan.setValueAtTime(panDirection, audioContext.currentTime); gainNode.gain.setValueAtTime(0.5, audioContext.currentTime); gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.1); oscillator.start(audioContext.currentTime); oscillator.stop(audioContext.currentTime + 0.1); panDirection *= -1; }
       function updateDirection() { switch (movePattern) { case 'horizontal': direction = { x: 1, y: 0 }; break; case 'diagonal1': direction = { x: dirX, y: dirY }; break; case 'diagonal2': direction = { x: -dirX, y: dirY }; break; } }
-      function moveBall() { const screen = { width: window.innerWidth, height: window.innerHeight }; if (isStopping) { const center = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 }; stopProgress += 1 / stopDuration; if (stopProgress >= 1) { position = center; cancelAnimationFrame(animationId); animationId = null; isStopping = false; } else { const ease = Math.pow(1 - stopProgress, 2); position.x += (center.x - position.x) * (1 - ease); position.y += (center.y - position.y) * (1 - ease); } } else { position.x += direction.x * speed; position.y += direction.y * speed; if (movePattern === 'horizontal') { if (position.x <= 0 || position.x + ballSize.width >= screen.width) { direction.x *= -1; playCollisionSound(); } } else { if (position.x <= 0 || position.x + ballSize.width >= screen.width || position.y <= 0 || position.y + ballSize.height >= screen.height) { direction.x *= -1; direction.y *= -1; playCollisionSound(); } } position.x = Math.max(0, Math.min(position.x, screen.width - ballSize.width)); position.y = Math.max(0, Math.min(position.y, screen.height - ballSize.height)); } ball.style.left = position.x + "px"; ball.style.top = position.y + "px"; if (animationId) animationId = requestAnimationFrame(moveBall); }
-      function stopBall() { if (animationId && !isStopping) { isStopping = true; stopProgress = 0; initialSpeed = speed; } }
+      
+      // ▼▼▼ この2つの関数を修正 ▼▼▼
+      function stopBall() {
+        if (animationId && !isStopping) {
+          isStopping = true;
+          stopProgress = 0;
+          startPosition = { ...position }; // 停止ボタンが押された瞬間の位置をコピー
+        }
+      }
+
+      function moveBall() {
+        const screen = { width: window.innerWidth, height: window.innerHeight };
+        if (isStopping) {
+          const center = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 };
+          stopProgress += 1 / stopDuration;
+          
+          const ease = 1 - Math.pow(1 - stopProgress, 3); // easeOutCubic
+
+          position.x = startPosition.x + (center.x - startPosition.x) * ease;
+          position.y = startPosition.y + (center.y - startPosition.y) * ease;
+          
+          if (stopProgress >= 1) {
+            position = center;
+            cancelAnimationFrame(animationId);
+            animationId = null;
+            isStopping = false;
+          }
+        } else {
+          position.x += direction.x * speed;
+          position.y += direction.y * speed;
+          if (movePattern === 'horizontal') { if (position.x <= 0 || position.x + ballSize.width >= screen.width) { direction.x *= -1; playCollisionSound(); } } else { if (position.x <= 0 || position.x + ballSize.width >= screen.width || position.y <= 0 || position.y + ballSize.height >= screen.height) { direction.x *= -1; direction.y *= -1; playCollisionSound(); } }
+          position.x = Math.max(0, Math.min(position.x, screen.width - ballSize.width));
+          position.y = Math.max(0, Math.min(position.y, screen.height - ballSize.height));
+        }
+        
+        ball.style.left = position.x + "px";
+        ball.style.top = position.y + "px";
+
+        if (animationId) {
+          animationId = requestAnimationFrame(moveBall);
+        }
+      }
+      // ▲▲▲ ここまで修正 ▲▲▲
 
       clientBallColorSelect.addEventListener("change", () => { initAudio(); if (audioContext && audioContext.state === 'suspended') { audioContext.resume(); } const newColor = clientBallColorSelect.value; ball.style.backgroundColor = newColor; socket.emit("ball-control", { type: "ballColor", value: newColor }); });
 
       socket.on("ball-control", (data) => {
         switch (data.type) {
-          case "start": isStopping = false; if (colorChooser) { colorChooser.style.display = "none"; } if (isAudioEnabled && isAudioInitialized && audioContext.state === 'suspended') { audioContext.resume(); } if (!animationId) { updateDirection(); animationId = requestAnimationFrame(moveBall); } break;
+          case "start":
+            isStopping = false;
+            if (colorChooser) { colorChooser.style.display = "none"; }
+            if (isAudioEnabled && isAudioInitialized && audioContext.state === 'suspended') { audioContext.resume(); }
+            if (!animationId) { updateDirection(); animationId = requestAnimationFrame(moveBall); }
+            break;
           case "stop": stopBall(); break;
           case "audioToggle": isAudioEnabled = data.value; if (isAudioEnabled) { initAudio(); } break;
           case "movePattern": movePattern = data.value; updateDirection(); break;
@@ -71,13 +115,10 @@
         }
       });
       
-      // ▼▼▼ ④ ボールの色を変更 ▼▼▼
       const ballColors = [ "#FFFFFF", "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#8AB5E6", "#E68D8A", "#B5E68A", "#4E7199", "#99514E", "#4E9967", "#FF0000", "#000000" ];
-      // ▲▲▲ ここまで ▲▲▲
       function populateColorSelect(selectElem, colorList) { if (!selectElem) return; colorList.forEach(color => { const option = document.createElement("option"); option.value = color; option.textContent = `⬛ ${color}`; option.style.backgroundColor = color; option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff"; selectElem.appendChild(option); }); }
       function getContrastYIQ(hexcolor) { hexcolor = hexcolor.replace("#", ""); const r = parseInt(hexcolor.substr(0,2),16); const g = parseInt(hexcolor.substr(2,2),16); const b = parseInt(hexcolor.substr(4,2),16); const yiq = ((r*299)+(g*587)+(b*114))/1000; return (yiq >= 128) ? 'black' : 'white'; }
       populateColorSelect(clientBallColorSelect, ballColors);
-      // 初期値を新しいリストの先頭に変更
       clientBallColorSelect.value = "#FFFFFF"; 
       
       window.addEventListener("resize", () => { const screen = { width: window.innerWidth, height: window.innerHeight }; if (!animationId) { position = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 }; ball.style.left = position.x + 'px'; ball.style.top = position.y + 'px'; } });
