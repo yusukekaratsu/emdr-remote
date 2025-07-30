@@ -5,52 +5,108 @@
   <title>EMDR Therapist Control</title>
   <style>
     html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; }
-    #controlPanel { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background-color: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); text-align: center; z-index: 10; }
-    #slider { width: 300px; }
+
+    /* ▼▼▼ ここからUIのスタイルを全面的に修正 ▼▼▼ */
+    #controlPanel {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(255, 255, 255, 0.95);
+      padding: 15px 20px; /* 縦のパディングを少し減らす */
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      z-index: 10;
+      
+      /* Flexboxで横並びレイアウトにする */
+      display: flex;
+      align-items: flex-start; /* 各項目を上揃えにする */
+      justify-content: center;
+      gap: 20px; /* 各項目の間の隙間 */
+      flex-wrap: wrap; /* 画面が狭い場合は折り返す */
+    }
+
+    .control-item {
+      text-align: center;
+    }
     
-    /* ▼ここから修正▼: ボタンのサイズを小さく */
+    .control-item label {
+      display: block; /* ラベルは常にコントロールの上に表示 */
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: bold;
+      color: #333;
+    }
+    
+    #slider {
+      width: 180px; /* スライダーを少し短くする */
+    }
+
     #startBtn, #stopBtn {
       padding: 8px 16px;
-      margin: 8px;
+      margin: 0 4px; /* ボタン間のマージンを調整 */
       font-size: 14px;
       cursor: pointer;
     }
-    /* ▲ここまで修正▲ */
+
+    /* ボタンだけ高さが違うので、見た目を揃えるための調整 */
+    .button-group {
+      padding-top: 20px; 
+    }
     
+    select {
+      padding: 5px;
+      font-size: 14px;
+    }
+    /* ▲▲▲ ここまでUIのスタイルを修正 ▲▲▲ */
+
     #ball { width: 50px; height: 50px; border-radius: 50%; position: absolute; top: 50%; transform: translateY(-50%); background-color: #FFB3BF; }
-    select { margin-top: 8px; padding: 5px; font-size: 14px; }
     option { padding: 4px; }
   </style>
 </head>
 <body style="background-color: #000000;">
 
+  <!-- ▼▼▼ ここからHTMLの構造を修正 ▼▼▼ -->
   <div id="controlPanel">
-    <!-- ▼ここから修正▼: <h2>タイトルを削除し、音の選択UIを追加 -->
-    <label for="slider">速度: <span id="speedDisplay">5</span></label><br />
-    <input type="range" id="slider" min="1" max="100" value="5" /><br /><br />
-
-    <button id="startBtn">スタート</button>
-    <button id="stopBtn">ストップ</button><br /><br />
-
-    <label for="ballColor">ボールの色:</label><br />
-    <select id="ballColor"></select><br /><br />
-
-    <label for="bgColor">背景色:</label><br />
-    <select id="bgColor"></select><br /><br />
     
-    <label for="soundType">音の種類:</label><br />
-    <select id="soundType">
-      <option value="none">音なし</option>
-      <option value="bell">穏やかなベル</option>
-      <option value="drop">水滴</option>
-    </select>
-    <!-- ▲ここまで修正▲ -->
+    <div class="control-item">
+      <label for="slider">速度: <span id="speedDisplay">5</span></label>
+      <input type="range" id="slider" min="1" max="100" value="5" />
+    </div>
+
+    <div class="control-item button-group">
+      <button id="startBtn">スタート</button>
+      <button id="stopBtn">ストップ</button>
+    </div>
+
+    <div class="control-item">
+      <label for="ballColor">ボール色</label>
+      <select id="ballColor"></select>
+    </div>
+
+    <div class="control-item">
+      <label for="bgColor">背景色</label>
+      <select id="bgColor"></select>
+    </div>
+    
+    <div class="control-item">
+      <label for="soundType">音の種類</label>
+      <select id="soundType">
+        <option value="none">音なし</option>
+        <option value="bell">穏やかなベル</option>
+        <option value="drop">水滴</option>
+      </select>
+    </div>
+
   </div>
+  <!-- ▲▲▲ ここまでHTMLの構造を修正 ▲▲▲ -->
   
   <div id="ball"></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
+    // JavaScript部分は一切変更ありません。
+    // 前回のコードをそのままお使いください。
     const socket = io();
     const slider = document.getElementById("slider");
     const speedDisplay = document.getElementById("speedDisplay");
@@ -59,7 +115,7 @@
     const ball = document.getElementById("ball");
     const ballColor = document.getElementById("ballColor");
     const bgColor = document.getElementById("bgColor");
-    const soundType = document.getElementById("soundType"); // 音の選択UIを取得
+    const soundType = document.getElementById("soundType");
 
     let position = (window.innerWidth - 50) / 2;
     ball.style.left = position + "px";
@@ -71,10 +127,7 @@
     let stopProgress = 0;
     const stopDuration = 120;
     let initialSpeed = speed;
-
-    // ▼ここから追加▼: 音声関連の変数
     let audioCtx = null;
-    // ▲ここまで追加▲
 
     const ballColors = [ "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#FA8072", "#FFFF00", "#800080", "#008000", "#9ACD32", "#00FFFF", "#7FFFD4", "#0000FF" ];
     const bgColors = [ "#FFFFFF", "#FFFAFA", "#F0FFFF", "#FFFFF0", "#C0C0C0", "#000000" ];
@@ -86,11 +139,9 @@
     bgColor.value = "#000000";
     
     startBtn.addEventListener("click", () => {
-      // ▼ここから追加▼: ユーザー操作時にAudioContextを初期化
       if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       }
-      // ▲ここまで追加▲
       isStopping = false;
       socket.emit("ball-control", { type: "start" });
       if (!animationId) {
@@ -101,83 +152,102 @@
     slider.addEventListener("input", () => { speed = parseInt(slider.value); speedDisplay.textContent = speed; socket.emit("ball-control", { type: "speed", value: speed }); });
     ballColor.addEventListener("change", () => { const color = ballColor.value; ball.style.backgroundColor = color; socket.emit("ball-control", { type: "ballColor", value: color }); });
     bgColor.addEventListener("change", () => { const color = bgColor.value; document.body.style.backgroundColor = color; socket.emit("ball-control", { type: "bgColor", value: color }); });
-
-    // ▼ここから追加▼: 音の種類が変更されたらクライアントに通知
     soundType.addEventListener("change", () => {
       const newSoundType = soundType.value;
       socket.emit("ball-control", { type: "soundType", value: newSoundType });
     });
-    // ▲ここまで追加▲
 
     function moveBall() {
       const ballWidth = 50;
       const screenWidth = window.innerWidth;
       if (isStopping) {
-        // ... 停止処理は変更なし ...
+        const center = (screenWidth - ballWidth) / 2;
+        stopProgress += 1 / stopDuration;
+        if (stopProgress >= 1) {
+          position = center;
+          ball.style.left = position + "px";
+          cancelAnimationFrame(animationId);
+          animationId = null;
+          isStopping = false;
+          return;
+        } else {
+          const currentSpeed = initialSpeed * Math.pow(1 - stopProgress, 2);
+          const delta = center - position;
+          const moveDirection = delta > 0 ? 1 : -1;
+          position += moveDirection * Math.min(Math.abs(delta), currentSpeed);
+        }
       } else {
         position += direction * speed;
         if (position <= 0 || position + ballWidth >= screenWidth) {
           direction *= -1;
           position = Math.max(0, Math.min(position, screenWidth - ballWidth));
-          playSound(soundType.value); // ▼端に到達したら音を鳴らす
+          playSound(soundType.value);
         }
       }
       ball.style.left = position + "px";
       animationId = requestAnimationFrame(moveBall);
     }
-    // ... moveBall内の停止ロジック、stopBall, socket.on, keydownイベントは前回のまま ...
-
-    // ▼ここから追加▼: 音を再生する関数
+    
     function playSound(type) {
       if (!audioCtx || type === 'none') return;
       const now = audioCtx.currentTime;
       const gainNode = audioCtx.createGain();
       gainNode.connect(audioCtx.destination);
       gainNode.gain.setValueAtTime(0, now);
-
       switch(type) {
         case 'bell': {
-          const osc1 = audioCtx.createOscillator();
-          const osc2 = audioCtx.createOscillator();
-          osc1.type = 'sine';
-          osc2.type = 'sine';
-          osc1.frequency.setValueAtTime(440, now); // ラ
-          osc2.frequency.setValueAtTime(441.5, now); // 少しずらして響きを出す
-
-          gainNode.gain.linearRampToValueAtTime(0.2, now + 0.01); // やさしいアタック
-          gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 1.5); // 長い余韻
-
-          osc1.connect(gainNode);
-          osc2.connect(gainNode);
-          osc1.start(now);
-          osc2.start(now);
-          osc1.stop(now + 1.5);
-          osc2.stop(now + 1.5);
-          break;
+          const osc1 = audioCtx.createOscillator(); const osc2 = audioCtx.createOscillator(); osc1.type = 'sine'; osc2.type = 'sine'; osc1.frequency.setValueAtTime(440, now); osc2.frequency.setValueAtTime(441.5, now); gainNode.gain.linearRampToValueAtTime(0.2, now + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 1.5); osc1.connect(gainNode); osc2.connect(gainNode); osc1.start(now); osc2.start(now); osc1.stop(now + 1.5); osc2.stop(now + 1.5); break;
         }
         case 'drop': {
-          const osc = audioCtx.createOscillator();
-          osc.type = 'sine';
-          
-          gainNode.gain.linearRampToValueAtTime(0.3, now + 0.01);
-          gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
-          
-          osc.frequency.setValueAtTime(900, now); // 高めの音から
-          osc.frequency.exponentialRampToValueAtTime(400, now + 0.5); // 急降下
-
-          osc.connect(gainNode);
-          osc.start(now);
-          osc.stop(now + 0.5);
-          break;
+          const osc = audioCtx.createOscillator(); osc.type = 'sine'; gainNode.gain.linearRampToValueAtTime(0.3, now + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.5); osc.frequency.setValueAtTime(900, now); osc.frequency.exponentialRampToValueAtTime(400, now + 0.5); osc.connect(gainNode); osc.start(now); osc.stop(now + 0.5); break;
         }
       }
     }
-    // ▲ここまで追加▲
 
-    // 既存のコードの残りの部分（stopBall, socket.on, keydown, resize）は変更ありません
-    // ...
+    function stopBall() {
+      if (animationId && !isStopping) { isStopping = true; stopProgress = 0; initialSpeed = speed; }
+    }
+
+    socket.on("ball-control", (data) => {
+      if (data.type === "start") {
+        if (!audioCtx) { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        isStopping = false;
+        if (!animationId) { moveBall(); }
+      } else if (data.type === "stop") {
+        stopBall();
+      } else if (data.type === "speed") {
+        speed = data.value; slider.value = speed; speedDisplay.textContent = speed;
+      } else if (data.type === "ballColor") {
+        const color = data.value; ball.style.backgroundColor = color; ballColor.value = color; 
+      } else if (data.type === "bgColor") {
+        const color = data.value; document.body.style.backgroundColor = color; bgColor.value = color;
+      } else if (data.type === "soundType") {
+        soundType.value = data.value;
+      }
+    });
+
+    window.addEventListener('keydown', (event) => {
+      switch (event.key) {
+        case 'Enter':
+          if (animationId) { stopBtn.click(); } else { startBtn.click(); }
+          event.preventDefault(); break;
+        case 'ArrowRight':
+          slider.value = parseInt(slider.value) + 1;
+          slider.dispatchEvent(new Event('input')); 
+          event.preventDefault(); break;
+        case 'ArrowLeft':
+          slider.value = parseInt(slider.value) - 1;
+          slider.dispatchEvent(new Event('input'));
+          event.preventDefault(); break;
+      }
+    });
+
+    window.addEventListener("resize", () => {
+      const ballWidth = 50;
+      if (!animationId) { position = (window.innerWidth - ballWidth) / 2; } 
+      else { if (position + ballWidth > window.innerWidth) { position = window.innerWidth - ballWidth; } }
+      ball.style.left = position + 'px';
+    });
   </script>
-  <!-- 便宜上、変更のないJavaScriptの残りの部分を省略しています。
-       実際には前回のコードのまま残してください。 -->
 </body>
 </html>
