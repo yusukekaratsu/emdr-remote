@@ -1,70 +1,83 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <title>EMDR Client</title>
-  <style>
-    /* ... スタイルは変更なし ... */
-  </style>
+  <!-- head内は変更なし -->
 </head>
 <body>
-  <div id="colorChooser">
-    <!-- ... HTMLは変更なし ... -->
-  </div>
-  <div id="ball"></div>
+  <!-- body内のHTMLは変更なし -->
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const socket = io();
-    const ball = document.getElementById("ball");
-    const colorChooser = document.getElementById("colorChooser");
-    const clientBallColor = document.getElementById("clientBallColor");
-
-    let position = (window.innerWidth - 50) / 2;
-    ball.style.left = position + "px";
-
-    let direction = 1;
-    let speed = 5;
-    let animationId = null;
-    let isStopping = false;
-    let stopProgress = 0;
-    const stopDuration = 120;
-    let initialSpeed = speed;
-
-    // ▼ここから追加▼: 音声関連の変数
+    // JavaScriptの前半部分は変更なし
+    // ...
+    let currentSoundType = 'none';
     let audioCtx = null;
-    let currentSoundType = 'none'; // 現在の音の種類を保存
-    // ▲ここまで追加▲
 
-    // ... populateColorSelect, getContrastYIQ, clientBallColorのリスナーは変更なし ...
-    
+
+    // ▼▼▼ ここから moveBall 関数を修正 ▼▼▼
     function moveBall() {
       const ballWidth = 50;
       const screenWidth = window.innerWidth;
       if (isStopping) {
-        // ... 停止処理は変更なし ...
+        // 停止処理は変更なし
+        const center = (screenWidth - ballWidth) / 2;
+        stopProgress += 1 / stopDuration;
+        if (stopProgress >= 1) {
+          position = center;
+          ball.style.left = position + "px";
+          cancelAnimationFrame(animationId);
+          animationId = null;
+          isStopping = false;
+          return;
+        } else {
+          const currentSpeed = initialSpeed * Math.pow(1 - stopProgress, 2);
+          const delta = center - position;
+          const moveDirection = delta > 0 ? 1 : -1;
+          position += moveDirection * Math.min(Math.abs(delta), currentSpeed);
+        }
       } else {
         position += direction * speed;
         if (position <= 0 || position + ballWidth >= screenWidth) {
           direction *= -1;
           position = Math.max(0, Math.min(position, screenWidth - ballWidth));
-          playSound(currentSoundType); // ▼端に到達したら音を鳴らす
+          
+          // ステレオのパン値を決定 (-1:左, 1:右)
+          const panValue = (direction === 1) ? -1 : 1;
+          playSound(currentSoundType, panValue); // panValueを渡す
         }
       }
       ball.style.left = position + "px";
       animationId = requestAnimationFrame(moveBall);
     }
-    // ... moveBall内の停止ロジック、stopBall関数は前回のまま ...
+    // ▲▲▲ ここまで moveBall 関数を修正 ▲▲▲
 
-    // ▼ここから追加▼: 音を再生する関数（セラピスト側と全く同じもの）
-    function playSound(type) {
+
+    // ▼▼▼ ここから playSound 関数を修正 ▼▼▼
+    function playSound(type, panValue = 0) { // panValue引数を追加
       if (!audioCtx || type === 'none') return;
       const now = audioCtx.currentTime;
+
+      // ステレオパンナーを作成
+      const panner = audioCtx.createStereoPanner();
+      panner.pan.setValueAtTime(panValue, now);
+      panner.connect(audioCtx.destination);
+
       const gainNode = audioCtx.createGain();
-      gainNode.connect(audioCtx.destination);
+      gainNode.connect(panner); // 出力をパンナーに接続
       gainNode.gain.setValueAtTime(0, now);
 
       switch(type) {
+        case 'pingpong': {
+          const osc = audioCtx.createOscillator();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(1000, now);
+          gainNode.gain.linearRampToValueAtTime(0.4, now + 0.01);
+          gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+          osc.connect(gainNode);
+          osc.start(now);
+          osc.stop(now + 0.2);
+          break;
+        }
         case 'bell': {
           const osc1 = audioCtx.createOscillator();
           const osc2 = audioCtx.createOscillator();
@@ -96,38 +109,10 @@
         }
       }
     }
-    // ▲ここまで追加▲
+    // ▲▲▲ ここまで playSound 関数を修正 ▲▲▲
 
-    socket.on("ball-control", (data) => {
-      if (data.type === "start") {
-        // ▼ここから追加▼: ユーザー操作時にAudioContextを初期化
-        if (!audioCtx) {
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        // ▲ここまで追加▲
-        isStopping = false;
-        if (colorChooser) { colorChooser.style.display = "none"; }
-        if (!animationId) { moveBall(); }
-      } else if (data.type === "stop") {
-        stopBall();
-      } else if (data.type === "speed") {
-        speed = data.value;
-      } else if (data.type === "ballColor") {
-        // ... 変更なし ...
-      } else if (data.type === "bgColor") {
-        // ... 変更なし ...
-      }
-      // ▼ここから追加▼: 音の種類の変更を受け取る
-      else if (data.type === "soundType") {
-        currentSoundType = data.value;
-      }
-      // ▲ここまで追加▲
-    });
-
-    // 既存のコードの残りの部分（resizeイベントなど）は変更ありません
-    // ...
+    // 便宜上、変更のないJavaScriptの残りの部分を省略しています。
+    // 実際には前回のコードのまま残してください。
   </script>
-   <!-- 便宜上、変更のないJavaScriptの残りの部分を省略しています。
-       実際には前回のコードのまま残してください。 -->
 </body>
 </html>
