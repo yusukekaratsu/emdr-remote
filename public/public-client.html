@@ -1,25 +1,97 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <!-- head内は変更なし -->
+  <meta charset="UTF-8" />
+  <title>EMDR Client</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000000;
+      font-family: sans-serif;
+    }
+    #ball {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background-color: #FFB3BF;
+    }
+    #colorChooser {
+      position: absolute;
+      top: 30%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: rgba(255, 255, 255, 0.95);
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      text-align: center;
+      z-index: 10;
+    }
+    #colorChooser label {
+      font-size: 18px;
+      color: #333;
+    }
+    #colorChooser select {
+      margin-top: 10px;
+      padding: 5px;
+      font-size: 14px;
+      min-width: 150px;
+    }
+    #colorChooser option {
+      padding: 4px;
+    }
+  </style>
 </head>
 <body>
-  <!-- body内のHTMLは変更なし -->
+  <div id="colorChooser">
+    <label for="clientBallColor">ボールの色を選んでください</label><br>
+    <select id="clientBallColor"></select>
+  </div>
+  <div id="ball"></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    // JavaScriptの前半部分は変更なし
-    // ...
-    let currentSoundType = 'none';
+    const socket = io();
+    const ball = document.getElementById("ball");
+    const colorChooser = document.getElementById("colorChooser");
+    const clientBallColor = document.getElementById("clientBallColor");
+
+    let position = (window.innerWidth - 50) / 2;
+    ball.style.left = position + "px";
+
+    let direction = 1;
+    let speed = 5;
+    let animationId = null;
+    let isStopping = false;
+    let stopProgress = 0;
+    const stopDuration = 120;
+    let initialSpeed = speed;
     let audioCtx = null;
+    let currentSoundType = 'none';
 
+    const ballColors = [ "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#FA8072", "#FFFF00", "#800080", "#008000", "#9ACD32", "#00FFFF", "#7FFFD4", "#0000FF" ];
+    function populateColorSelect(selectElem, colorList) { colorList.forEach(color => { const option = document.createElement("option"); option.value = color; option.textContent = `⬛ ${color}`; option.style.backgroundColor = color; option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff"; selectElem.appendChild(option); }); }
+    function getContrastYIQ(hexcolor) { hexcolor = hexcolor.replace("#", ""); const r = parseInt(hexcolor.substr(0,2),16); const g = parseInt(hexcolor.substr(2,2),16); const b = parseInt(hexcolor.substr(4,2),16); const yiq = ((r*299)+(g*587)+(b*114))/1000; return (yiq >= 128) ? 'black' : 'white'; }
+    populateColorSelect(clientBallColor, ballColors);
+    clientBallColor.value = "#FFB3BF";
+    
+    clientBallColor.addEventListener("change", () => {
+      if (!audioCtx) { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      const newColor = clientBallColor.value;
+      ball.style.backgroundColor = newColor;
+      socket.emit("ball-control", { type: "ballColor", value: newColor });
+    });
 
-    // ▼▼▼ ここから moveBall 関数を修正 ▼▼▼
     function moveBall() {
       const ballWidth = 50;
       const screenWidth = window.innerWidth;
       if (isStopping) {
-        // 停止処理は変更なし
         const center = (screenWidth - ballWidth) / 2;
         stopProgress += 1 / stopDuration;
         if (stopProgress >= 1) {
@@ -40,79 +112,52 @@
         if (position <= 0 || position + ballWidth >= screenWidth) {
           direction *= -1;
           position = Math.max(0, Math.min(position, screenWidth - ballWidth));
-          
-          // ステレオのパン値を決定 (-1:左, 1:右)
           const panValue = (direction === 1) ? -1 : 1;
-          playSound(currentSoundType, panValue); // panValueを渡す
+          playSound(currentSoundType, panValue);
         }
       }
       ball.style.left = position + "px";
       animationId = requestAnimationFrame(moveBall);
     }
-    // ▲▲▲ ここまで moveBall 関数を修正 ▲▲▲
-
-
-    // ▼▼▼ ここから playSound 関数を修正 ▼▼▼
-    function playSound(type, panValue = 0) { // panValue引数を追加
+    
+    function playSound(type, panValue = 0) {
       if (!audioCtx || type === 'none') return;
       const now = audioCtx.currentTime;
-
-      // ステレオパンナーを作成
       const panner = audioCtx.createStereoPanner();
       panner.pan.setValueAtTime(panValue, now);
       panner.connect(audioCtx.destination);
-
       const gainNode = audioCtx.createGain();
-      gainNode.connect(panner); // 出力をパンナーに接続
+      gainNode.connect(panner);
       gainNode.gain.setValueAtTime(0, now);
-
       switch(type) {
-        case 'pingpong': {
-          const osc = audioCtx.createOscillator();
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(1000, now);
-          gainNode.gain.linearRampToValueAtTime(0.4, now + 0.01);
-          gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
-          osc.connect(gainNode);
-          osc.start(now);
-          osc.stop(now + 0.2);
-          break;
-        }
-        case 'bell': {
-          const osc1 = audioCtx.createOscillator();
-          const osc2 = audioCtx.createOscillator();
-          osc1.type = 'sine';
-          osc2.type = 'sine';
-          osc1.frequency.setValueAtTime(440, now);
-          osc2.frequency.setValueAtTime(441.5, now);
-          gainNode.gain.linearRampToValueAtTime(0.2, now + 0.01);
-          gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 1.5);
-          osc1.connect(gainNode);
-          osc2.connect(gainNode);
-          osc1.start(now);
-          osc2.start(now);
-          osc1.stop(now + 1.5);
-          osc2.stop(now + 1.5);
-          break;
-        }
-        case 'drop': {
-          const osc = audioCtx.createOscillator();
-          osc.type = 'sine';
-          gainNode.gain.linearRampToValueAtTime(0.3, now + 0.01);
-          gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
-          osc.frequency.setValueAtTime(900, now);
-          osc.frequency.exponentialRampToValueAtTime(400, now + 0.5);
-          osc.connect(gainNode);
-          osc.start(now);
-          osc.stop(now + 0.5);
-          break;
-        }
+        case 'pingpong': { const osc = audioCtx.createOscillator(); osc.type = 'sine'; osc.frequency.setValueAtTime(1000, now); gainNode.gain.linearRampToValueAtTime(0.4, now + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.2); osc.connect(gainNode); osc.start(now); osc.stop(now + 0.2); break; }
+        case 'bell': { const osc1 = audioCtx.createOscillator(); const osc2 = audioCtx.createOscillator(); osc1.type = 'sine'; osc2.type = 'sine'; osc1.frequency.setValueAtTime(440, now); osc2.frequency.setValueAtTime(441.5, now); gainNode.gain.linearRampToValueAtTime(0.2, now + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 1.5); osc1.connect(gainNode); osc2.connect(gainNode); osc1.start(now); osc2.start(now); osc1.stop(now + 1.5); osc2.stop(now + 1.5); break; }
+        case 'drop': { const osc = audioCtx.createOscillator(); osc.type = 'sine'; gainNode.gain.linearRampToValueAtTime(0.3, now + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.5); osc.frequency.setValueAtTime(900, now); osc.frequency.exponentialRampToValueAtTime(400, now + 0.5); osc.connect(gainNode); osc.start(now); osc.stop(now + 0.5); break; }
       }
     }
-    // ▲▲▲ ここまで playSound 関数を修正 ▲▲▲
+    
+    function stopBall() { if (animationId && !isStopping) { isStopping = true; stopProgress = 0; initialSpeed = speed; } }
 
-    // 便宜上、変更のないJavaScriptの残りの部分を省略しています。
-    // 実際には前回のコードのまま残してください。
+    socket.on("ball-control", (data) => {
+      if (data.type === "start") {
+        if (!audioCtx) { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        isStopping = false;
+        if (colorChooser) { colorChooser.style.display = "none"; }
+        if (!animationId) { moveBall(); }
+      } 
+      else if (data.type === "stop") { stopBall(); } 
+      else if (data.type === "speed") { speed = data.value; } 
+      else if (data.type === "ballColor") { const color = data.value; ball.style.backgroundColor = color; clientBallColor.value = color; } 
+      else if (data.type === "bgColor") { document.body.style.backgroundColor = data.value; } 
+      else if (data.type === "soundType") { currentSoundType = data.value; }
+    });
+    
+    window.addEventListener("resize", () => {
+      const ballWidth = 50;
+      if (!animationId) { position = (window.innerWidth - ballWidth) / 2; } 
+      else { if (position + ballWidth > window.innerWidth) { position = window.innerWidth - ballWidth; } }
+      ball.style.left = position + 'px';
+    });
   </script>
 </body>
 </html>
