@@ -30,11 +30,17 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log("A user disconnected");
   });
+  
+  socket.on('ping', () => {
+  // このログが表示されれば、ハートビートが機能している証拠です
+  // console.log(`Ping received from ${socket.id}`);
+  });
 });
 
 // サーバー起動
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
 
 
