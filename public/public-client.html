@@ -140,7 +140,11 @@
       
       window.addEventListener("resize", () => { const screen = { width: window.innerWidth, height: window.innerHeight }; if (!animationId) { position = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 }; ball.style.left = position.x + 'px'; ball.style.top = position.y + 'px'; } });
     });
+    socket.on('connect', () => {
+    console.log('サーバーに再接続しました。 ID:', socket.id);
+    });
   </script>
 </body>
 </html>
+
 
