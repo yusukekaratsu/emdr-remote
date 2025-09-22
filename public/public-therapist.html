@@ -256,10 +256,16 @@
       window.addEventListener("resize", () => { const screen = { width: window.innerWidth, height: window.innerHeight }; if (!animationId) { position = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 }; ball.style.left = position.x + 'px'; ball.style.top = position.y + 'px'; } });
     });
     socket.on('connect', () => {
-    console.log('サーバーに再接続しました。 ID:', socket.id);
+      console.log('サーバーに再接続しました。 ID:', socket.id);
+    });
+    
+    socket.on('disconnect', (reason) => {
+      console.log('サーバーから切断されました。理由:', reason);
+      // 再接続が自動で行われます
     });
   </script>
 </body>
 </html>
+
 
 
