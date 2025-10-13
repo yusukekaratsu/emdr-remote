@@ -1,46 +1,39 @@
-const express = require("express");
-const http = require("http");
-const socketIO = require("socket.io");
-const path = require("path");
+// server.js
 
+const express = require('express');
 const app = express();
+const http = require('http');
 const server = http.createServer(app);
-const io = socketIO(server);
+const { Server } = require("socket.io");
+const io = new Server(server);
 
-// Renderで必要：環境変数 PORT を使う
-const PORT = process.env.PORT || 3000;
+// 1. publicフォルダを静的ファイルとして提供する設定
+app.use(express.static('public'));
 
-// 静的ファイル（publicフォルダ）を公開
-app.use(express.static(path.join(__dirname, "public")));
+io.on('connection', (socket) => {
+  console.log('a user connected:', socket.id);
 
-// ルートアクセスでクライエント画面にリダイレクト
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "public-client.html"));
-});
-
-// Socket.IOの接続処理
-io.on("connection", (socket) => {
-  console.log("A user connected");
-
-  // セラピストから送られた操作を他のクライエントに中継
-  socket.on("ball-control", (data) => {
-    socket.broadcast.emit("ball-control", data);
+  socket.on('disconnect', () => {
+    console.log('user disconnected:', socket.id);
   });
 
-  socket.on("disconnect", () => {
-    console.log("A user disconnected");
+  // EMDRコントロールの通信
+  socket.on('ball-control', (data) => {
+    socket.broadcast.emit('ball-control', data);
   });
   
+  // ▼▼▼ 2. BGMコントロール用の通信を中継する設定を追加 ▼▼▼
+  socket.on('music-control', (data) => {
+    socket.broadcast.emit('music-control', data);
+  });
+
+  // ping/pong (Renderスリープ対策)
   socket.on('ping', () => {
-  // このログが表示されれば、ハートビートが機能している証拠です
-  // console.log(`Ping received from ${socket.id}`);
+    // console.log(`Ping from ${socket.id}`);
   });
 });
 
-// サーバー起動
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
-
-
-
