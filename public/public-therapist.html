@@ -39,7 +39,6 @@
 
     <div class="control-group">
       <label for="speedSlider">速さ: <span id="speedValue">5</span></label>
-      <!-- ▼▼▼ 修正点: 速度上限を100に変更 ▼▼▼ -->
       <input type="range" id="speedSlider" min="1" max="100" value="5" />
     </div>
 
@@ -71,7 +70,7 @@
     document.addEventListener('DOMContentLoaded', () => {
       const socket = io();
 
-      // --- DOM要素の取得 ---
+      // --- DOM要素 ---
       const startBtn = document.getElementById('startBtn');
       const stopBtn = document.getElementById('stopBtn');
       const speedSlider = document.getElementById('speedSlider');
@@ -83,10 +82,10 @@
       const musicToggleBtn = document.getElementById('musicToggleBtn');
       const volumeSlider = document.getElementById('volumeSlider');
       
-      // --- 状態管理変数 ---
-      let isBallMoving = false; // ボールの動作状態を管理
+      // --- 状態管理 ---
+      let isBallMoving = false;
 
-      // --- BGM関連の変数 ---
+      // --- BGM関連 ---
       const audioPlayer = new Audio();
       const musicPlaylist = [
           '/audio/1 Blue Berry Pufffin.mp3', '/audio/2 A Step In The River.mp3',
@@ -109,30 +108,12 @@
           return newArray;
       }
       
-      // ▼▼▼ 修正点: BGM再生ロジックを堅牢化 (async/await使用) ▼▼▼
-      async function playNextSong() {
-        if (shuffledPlaylist.length === 0 || currentTrackIndex >= shuffledPlaylist.length) {
-          shuffledPlaylist = shufflePlaylist(musicPlaylist);
-          currentTrackIndex = 0;
+      function playSongAtIndex(index) {
+        if (index < shuffledPlaylist.length) {
+          const trackToPlay = shuffledPlaylist[index];
+          audioPlayer.src = trackToPlay;
+          audioPlayer.play().catch(e => console.error("セラピスト側での再生エラー:", e));
         }
-        
-        const trackToPlay = shuffledPlaylist[currentTrackIndex];
-        audioPlayer.src = trackToPlay;
-        
-        try {
-          await audioPlayer.play();
-          musicToggleBtn.textContent = '停止';
-          socket.emit('music-control', { type: 'play', src: trackToPlay });
-        } catch (error) {
-          console.error("BGMの再生に失敗しました:", error);
-          musicToggleBtn.textContent = '再生'; // 失敗したらUIを元に戻す
-        }
-      }
-      
-      function pauseMusic() {
-        audioPlayer.pause();
-        musicToggleBtn.textContent = '再生';
-        socket.emit('music-control', { type: 'pause' });
       }
 
       // --- イベントリスナー ---
@@ -157,12 +138,31 @@
       ballColorSelect.addEventListener('change', () => socket.emit("ball-control", { type: "ballColor", value: ballColorSelect.value }));
       bgColorSelect.addEventListener('change', () => socket.emit("ball-control", { type: "bgColor", value: bgColorSelect.value }));
 
-      // BGM関連のイベントリスナー
-      musicToggleBtn.addEventListener('click', async () => {
+      // ▼▼▼ 修正: BGMの再生/停止ロジック ▼▼▼
+      musicToggleBtn.addEventListener('click', () => {
         if (audioPlayer.paused) {
-          await playNextSong();
+          if (shuffledPlaylist.length === 0) {
+            // 初回再生
+            shuffledPlaylist = shufflePlaylist(musicPlaylist);
+            currentTrackIndex = 0;
+            // クライアントにプレイリストと開始を指示
+            socket.emit('music-start', { 
+              playlist: shuffledPlaylist, 
+              startIndex: currentTrackIndex,
+              volume: volumeSlider.value 
+            });
+            playSongAtIndex(currentTrackIndex);
+          } else {
+            // 一時停止からの再開
+            audioPlayer.play();
+            socket.emit('music-control', { type: 'resume' });
+          }
+          musicToggleBtn.textContent = '停止';
         } else {
-          pauseMusic();
+          // 再生中 -> 一時停止
+          audioPlayer.pause();
+          socket.emit('music-control', { type: 'pause' });
+          musicToggleBtn.textContent = '再生';
         }
       });
       
@@ -171,42 +171,39 @@
           socket.emit('music-control', { type: 'volume', value: volumeSlider.value });
       });
       
+      // セラピスト側のプレーヤーが曲を終えたら、次の曲へ
       audioPlayer.addEventListener('ended', () => {
           currentTrackIndex++;
-          playNextSong();
+          // プレイリストの最後に到達したら、再度シャッフルして最初から
+          if (currentTrackIndex >= shuffledPlaylist.length) {
+            shuffledPlaylist = shufflePlaylist(musicPlaylist);
+            currentTrackIndex = 0;
+            // クライアントにも新しいプレイリストを送信
+            socket.emit('music-start', { playlist: shuffledPlaylist, startIndex: currentTrackIndex, volume: volumeSlider.value });
+          }
+          playSongAtIndex(currentTrackIndex);
       });
 
-      // ▼▼▼ 修正点: キーボード操作の復活 ▼▼▼
       document.addEventListener('keydown', (e) => {
-        // Enterキーで開始/停止をトグル
         if (e.key === 'Enter') {
-          if (isBallMoving) {
-            stopBtn.click();
-          } else {
-            startBtn.click();
-          }
+          if (isBallMoving) stopBtn.click(); else startBtn.click();
         }
-        // 矢印キーで速度を調整
         if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
           e.preventDefault();
           speedSlider.value = Math.min(parseInt(speedSlider.value) + 1, 100);
-          speedSlider.dispatchEvent(new Event('input')); // イベントを発火させてサーバーに通知
+          speedSlider.dispatchEvent(new Event('input'));
         }
         if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
           e.preventDefault();
           speedSlider.value = Math.max(parseInt(speedSlider.value) - 1, 1);
-          speedSlider.dispatchEvent(new Event('input')); // イベントを発火させてサーバーに通知
+          speedSlider.dispatchEvent(new Event('input'));
         }
       });
       
-      // クライアントからのボールの色変更通知
       socket.on("ball-control", (data) => {
-        if (data.type === "ballColor") {
-          ballColorSelect.value = data.value;
-        }
+        if (data.type === "ballColor") ballColorSelect.value = data.value;
       });
 
-      // 接続維持と監視
       setInterval(() => socket.emit('ping'), 30000);
       socket.on('connect', () => console.log('サーバーに接続しました。 ID:', socket.id));
       socket.on('disconnect', (reason) => console.log('サーバーから切断されました。理由:', reason));
@@ -218,8 +215,7 @@
       function populateColorSelect(selectElem, colorList) {
         colorList.forEach(color => {
           const option = document.createElement("option");
-          option.value = color;
-          option.textContent = `⬛ ${color}`;
+          option.value = color; option.textContent = `⬛ ${color}`;
           option.style.backgroundColor = color;
           option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff";
           selectElem.appendChild(option);
@@ -230,10 +226,8 @@
         const r = parseInt(hexcolor.substr(0,2),16), g = parseInt(hexcolor.substr(2,2),16), b = parseInt(hexcolor.substr(4,2),16);
         return ((r*299)+(g*587)+(b*114))/1000 >= 128 ? 'black' : 'white';
       }
-
       populateColorSelect(ballColorSelect, ballColors);
       populateColorSelect(bgColorSelect, bgColors);
-      shuffledPlaylist = shufflePlaylist(musicPlaylist);
     });
   </script>
 </body>
