@@ -35,6 +35,7 @@
       let currentTrackIndex = 0;
       let audioContext, panner; // 衝突音用
       let panDirection = -1, isAudioEnabled = false, isAudioInitialized = false;
+      let isAudioUnlocked = false; // ★★★ 修正点: 音声再生許可フラグを追加 ★★★
 
       // --- ボール状態 ---
       const ballSize = { width: 50, height: 50 };
@@ -72,26 +73,111 @@
         panDirection *= -1;
       }
       
-      // ▼▼▼ 追加: クライアント側でBGMを再生する関数 ▼▼▼
       function playSongAtIndex(index) {
         if (index < musicPlaylist.length) {
           const trackToPlay = musicPlaylist[index];
           audioPlayer.src = trackToPlay;
-          audioPlayer.play().catch(e => console.error(`クライアント再生エラー: ${e}`));
+          const playPromise = audioPlayer.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(e => console.error(`クライアント再生エラー: ${e.name} - ${e.message}`));
+          }
+        }
+      }
+      
+      function updateDirection() {
+        switch (movePattern) {
+          case 'horizontal': direction = { x: 1, y: 0 }; break;
+          case 'diagonal1': direction = { x: dirX, y: dirY }; break;
+          case 'diagonal2': direction = { x: -dirX, y: dirY }; break;
         }
       }
 
-      function updateDirection() { /* (変更なし) */ }
-      function stopBall() { /* (変更なし) */ }
-      function moveBall() { /* (変更なし) */ }
+      function stopBall() {
+        if (animationId && !isStopping) {
+          isStopping = true;
+          hasReachedEdge = false;
+        }
+      }
 
-      // (省略した関数をここに展開)
-      updateDirection=()=>{switch(movePattern){case'horizontal':direction={x:1,y:0};break;case'diagonal1':direction={x:dirX,y:dirY};break;case'diagonal2':direction={x:-dirX,y:dirY};break;}};stopBall=()=>{if(animationId&&!isStopping){isStopping=!0;hasReachedEdge=!1}};moveBall=()=>{const e={width:window.innerWidth,height:window.innerHeight};if(isStopping)if(hasReachedEdge){const t={x:(e.width-ballSize.width)/2,y:(e.height-ballSize.height)/2};stopProgress+=1/stopDuration;const o=1-Math.pow(1-stopProgress,3);position.x=returnStartPosition.x+(t.x-returnStartPosition.x)*o;position.y=returnStartPosition.y+(t.y-returnStartPosition.y)*o;if(stopProgress>=1){position=t;cancelAnimationFrame(animationId);animationId=null;isStopping=!1;return}}else{position.x+=direction.x*speed;position.y+=direction.y*speed;if(position.x<=0||position.x+ballSize.width>=e.width||position.y<=0||position.y+ballSize.height>=e.height){playCollisionSound();hasReachedEdge=!0;returnStartPosition={...position};stopProgress=0}}else{position.x+=direction.x*speed;position.y+=direction.y*speed;if(movePattern==="horizontal"){if(position.x<=0||position.x+ballSize.width>=e.width){direction.x*=-1;playCollisionSound()}}else if(position.x<=0||position.x+ballSize.width>=e.width||position.y<=0||position.y+ballSize.height>=e.height){direction.x*=-1;direction.y*=-1;playCollisionSound()}}position.x=Math.max(0,Math.min(position.x,e.width-ballSize.width));position.y=Math.max(0,Math.min(position.y,e.height-ballSize.height));ball.style.left=position.x+"px";ball.style.top=position.y+"px";if(animationId)animationId=requestAnimationFrame(moveBall)};
+      function moveBall() {
+        const screen = { width: window.innerWidth, height: window.innerHeight };
+        if (isStopping) {
+          if (!hasReachedEdge) {
+            position.x += direction.x * speed;
+            position.y += direction.y * speed;
+            if (position.x <= 0 || position.x + ballSize.width >= screen.width || position.y <= 0 || position.y + ballSize.height >= screen.height) {
+              playCollisionSound();
+              hasReachedEdge = true;
+              returnStartPosition = { ...position };
+              stopProgress = 0;
+            }
+          } else {
+            const center = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 };
+            stopProgress += 1 / stopDuration;
+            const ease = 1 - Math.pow(1 - stopProgress, 3);
+            position.x = returnStartPosition.x + (center.x - returnStartPosition.x) * ease;
+            position.y = returnStartPosition.y + (center.y - returnStartPosition.y) * ease;
+            if (stopProgress >= 1) {
+              position = center;
+              cancelAnimationFrame(animationId);
+              animationId = null;
+              isStopping = false;
+              ball.style.left = position.x + "px"; ball.style.top = position.y + "px";
+              return;
+            }
+          }
+        } else {
+          position.x += direction.x * speed;
+          position.y += direction.y * speed;
+          if (movePattern === 'horizontal') {
+            if (position.x <= 0 || position.x + ballSize.width >= screen.width) {
+              direction.x *= -1;
+              playCollisionSound();
+            }
+          } else {
+            if (position.x <= 0 || position.x + ballSize.width >= screen.width || position.y <= 0 || position.y + ballSize.height >= screen.height) {
+              direction.x *= -1;
+              direction.y *= -1;
+              playCollisionSound();
+            }
+          }
+        }
+        position.x = Math.max(0, Math.min(position.x, screen.width - ballSize.width));
+        position.y = Math.max(0, Math.min(position.y, screen.height - ballSize.height));
+        ball.style.left = position.x + "px";
+        ball.style.top = position.y + "px";
+        if (animationId) animationId = requestAnimationFrame(moveBall);
+      }
 
       // --- イベントリスナー ---
+
+      // ★★★ ここが最も重要な修正点です ★★★
       clientBallColorSelect.addEventListener("change", () => {
-        initAudio(); // ユーザー操作をきっかけにオーディオを初期化
-        if (audioContext && audioContext.state === 'suspended') audioContext.resume();
+        // 最初のユーザー操作でオーディオをアンロックする
+        if (!isAudioUnlocked) {
+          // 衝突音の準備
+          initAudio();
+          if (audioContext && audioContext.state === 'suspended') {
+            audioContext.resume();
+          }
+          
+          // BGMプレーヤーの再生許可を得るためのトリック
+          audioPlayer.muted = true;
+          const promise = audioPlayer.play();
+          if (promise !== undefined) {
+            promise.then(() => {
+              audioPlayer.pause();
+              audioPlayer.muted = false;
+              console.log("BGM再生の準備ができました。");
+            }).catch(error => {
+              console.error("オーディオのアンロックに失敗:", error);
+              audioPlayer.muted = false;
+            });
+          }
+          isAudioUnlocked = true; // この処理は一度だけ実行
+        }
+
+        // 従来の色変更処理
         const newColor = clientBallColorSelect.value;
         ball.style.backgroundColor = newColor;
         socket.emit("ball-control", { type: "ballColor", value: newColor });
@@ -109,7 +195,6 @@
         }
       });
       
-      // ▼▼▼ 修正: BGMコントロールのリスナー ▼▼▼
       socket.on('music-start', (data) => {
         musicPlaylist = data.playlist;
         currentTrackIndex = data.startIndex;
@@ -119,23 +204,14 @@
 
       socket.on('music-control', (data) => {
         switch (data.type) {
-          case 'pause':
-            audioPlayer.pause();
-            break;
-          case 'resume':
-            audioPlayer.play().catch(e => console.error("クライアント再生再開エラー:", e));
-            break;
-          case 'volume':
-            audioPlayer.volume = data.value;
-            break;
+          case 'pause': audioPlayer.pause(); break;
+          case 'resume': audioPlayer.play().catch(e => console.error("クライアント再生再開エラー:", e)); break;
+          case 'volume': audioPlayer.volume = data.value; break;
         }
       });
       
-      // ▼▼▼ 追加: クライアント側で曲の終了を検知し、次の曲へ進む ▼▼▼
       audioPlayer.addEventListener('ended', () => {
         currentTrackIndex++;
-        // プレイリストの最後に到達したら、次のプレイリストが送られてくるのを待つ
-        // 自分でループ再生するとセラピストと同期がズレる可能性があるため、リストの範囲内でのみ再生
         if (currentTrackIndex < musicPlaylist.length) {
             playSongAtIndex(currentTrackIndex);
         }
@@ -145,7 +221,7 @@
       socket.on('connect', () => console.log('サーバーに再接続しました。 ID:', socket.id));
       socket.on('disconnect', (reason) => console.log('サーバーから切断されました。理由:', reason));
 
-      const ballColors = [ "#FFFFFF", "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#8AB5E6", "#E68D8A", "#B5E68A", "#4E7199", "#99514E", "#4E9967", "#FF0000", "#000000" ];
+      const ballColors = [ "#FFFFFF", "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#8AB5E6", "#E68D8A", "#B5E6A", "#4E7199", "#99514E", "#4E9967", "#FF0000", "#000000" ];
       function populateColorSelect(selectElem,colorList){if(!selectElem)return;colorList.forEach(color=>{const option=document.createElement("option");option.value=color;option.textContent=`⬛ ${color}`;option.style.backgroundColor=color;option.style.color=getContrastYIQ(color)==="black"?"#000":"#fff";selectElem.appendChild(option)})}
       function getContrastYIQ(hexcolor){hexcolor=hexcolor.replace("#","");const r=parseInt(hexcolor.substr(0,2),16),g=parseInt(hexcolor.substr(2,2),16),b=parseInt(hexcolor.substr(4,2),16);return((r*299)+(g*587)+(b*114))/1000>=128?'black':'white'}
       populateColorSelect(clientBallColorSelect, ballColors);
