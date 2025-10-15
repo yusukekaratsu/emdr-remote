@@ -39,7 +39,8 @@
 
     <div class="control-group">
       <label for="speedSlider">速さ: <span id="speedValue">5</span></label>
-      <input type="range" id="speedSlider" min="1" max="20" value="5" />
+      <!-- ▼▼▼ 修正点: 速度上限を100に変更 ▼▼▼ -->
+      <input type="range" id="speedSlider" min="1" max="100" value="5" />
     </div>
 
     <div class="control-group">
@@ -64,8 +65,6 @@
       </div>
     </div>
   </div>
-  
-  <div id="ball" style="display: none;"></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
@@ -81,136 +80,136 @@
       const audioToggle = document.getElementById('audioToggle');
       const ballColorSelect = document.getElementById('ballColor');
       const bgColorSelect = document.getElementById('bgColor');
-      
-      // --- BGM関連の要素と変数 ---
       const musicToggleBtn = document.getElementById('musicToggleBtn');
       const volumeSlider = document.getElementById('volumeSlider');
-      const audioPlayer = new Audio(); // BGM再生用のAudioオブジェクト
       
-      // ▼▼▼ 変更点 1: プレイリストの管理変数を追加 ▼▼▼
+      // --- 状態管理変数 ---
+      let isBallMoving = false; // ボールの動作状態を管理
+
+      // --- BGM関連の変数 ---
+      const audioPlayer = new Audio();
       const musicPlaylist = [
-          '/audio/1 Blue Berry Pufffin.mp3',
-          '/audio/2 A Step In The River.mp3',
-          '/audio/3 Peak\'s Performance.mp3',
-          '/audio/4 Jazz Hoyt.mp3',
-          '/audio/5 Pop\'s Trilogy.mp3',
-          '/audio/6 Redemption.mp3',
-          '/audio/7 Oceanic Fellings.mp3',
-          '/audio/8 Paco Bell.mp3',
-          '/audio/9 Round The Lake.mp3',
-          '/audio/10 Piano R Squared.mp3',
+          '/audio/1 Blue Berry Pufffin.mp3', '/audio/2 A Step In The River.mp3',
+          '/audio/3 Peak\'s Performance.mp3', '/audio/4 Jazz Hoyt.mp3',
+          '/audio/5 Pop\'s Trilogy.mp3', '/audio/6 Redemption.mp3',
+          '/audio/7 Oceanic Fellings.mp3', '/audio/8 Paco Bell.mp3',
+          '/audio/9 Round The Lake.mp3', '/audio/10 Piano R Squared.mp3',
           '/audio/11 New (No) Frills - Shaken, Not Stirred.mp3'
       ];
       let shuffledPlaylist = [];
       let currentTrackIndex = 0;
-      // ▲▲▲ ここまで ▲▲▲
 
       // --- 関数定義 ---
-
-      // ▼▼▼ 変更点 2: 配列をシャッフルする関数を追加 ▼▼▼
       function shufflePlaylist(array) {
-          // 元の配列を壊さないようにコピーを作成
           const newArray = [...array];
           for (let i = newArray.length - 1; i > 0; i--) {
               const j = Math.floor(Math.random() * (i + 1));
-              [newArray[i], newArray[j]] = [newArray[j], newArray[i]]; // 要素を入れ替え
+              [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
           }
           return newArray;
       }
-      // ▲▲▲ ここまで ▲▲▲
-
-      // ▼▼▼ 変更点 3: 音楽再生ロジックを大幅に修正 ▼▼▼
-      // 次の曲を再生するメインの関数
-      function playNextSong() {
-        // プレイリストの最後まで再生し終わったら、再度シャッフルして最初から
-        if (currentTrackIndex >= shuffledPlaylist.length) {
+      
+      // ▼▼▼ 修正点: BGM再生ロジックを堅牢化 (async/await使用) ▼▼▼
+      async function playNextSong() {
+        if (shuffledPlaylist.length === 0 || currentTrackIndex >= shuffledPlaylist.length) {
           shuffledPlaylist = shufflePlaylist(musicPlaylist);
           currentTrackIndex = 0;
         }
         
         const trackToPlay = shuffledPlaylist[currentTrackIndex];
         audioPlayer.src = trackToPlay;
-        audioPlayer.play();
-        musicToggleBtn.textContent = '停止';
         
-        // クライアントに再生を指示
-        socket.emit('music-control', { type: 'play', src: trackToPlay });
+        try {
+          await audioPlayer.play();
+          musicToggleBtn.textContent = '停止';
+          socket.emit('music-control', { type: 'play', src: trackToPlay });
+        } catch (error) {
+          console.error("BGMの再生に失敗しました:", error);
+          musicToggleBtn.textContent = '再生'; // 失敗したらUIを元に戻す
+        }
       }
       
-      // 音楽を一時停止する関数
       function pauseMusic() {
         audioPlayer.pause();
         musicToggleBtn.textContent = '再生';
-        // クライアントに一時停止を指示
         socket.emit('music-control', { type: 'pause' });
       }
 
-      // 再生・停止ボタンのイベント
-      musicToggleBtn.addEventListener('click', () => {
-        if (audioPlayer.paused) {
-          // 停止中なら次の曲（または最初の曲）を再生
-          playNextSong();
-        } else {
-          // 再生中なら一時停止
-          pauseMusic();
-        }
-      });
-      // ▲▲▲ ここまで ▲▲▲
-
-      // 音量スライダーのイベント
-      volumeSlider.addEventListener('input', () => {
-          const volume = volumeSlider.value;
-          audioPlayer.volume = volume;
-          socket.emit('music-control', { type: 'volume', value: volume });
+      // --- イベントリスナー ---
+      startBtn.addEventListener('click', () => {
+        isBallMoving = true;
+        socket.emit("ball-control", { type: "start" });
       });
 
-      // ▼▼▼ 変更点 4: 曲が終了したら自動で次の曲へ進むイベントリスナーを追加 ▼▼▼
-      audioPlayer.addEventListener('ended', () => {
-          currentTrackIndex++; // 次の曲へインデックスを進める
-          playNextSong();      // 次の曲を再生する関数を呼び出す
+      stopBtn.addEventListener('click', () => {
+        isBallMoving = false;
+        socket.emit("ball-control", { type: "stop" });
       });
-      // ▲▲▲ ここまで ▲▲▲
-      
-      // --- その他のイベントリスナー ---
-      startBtn.addEventListener('click', () => socket.emit("ball-control", { type: "start" }));
-      stopBtn.addEventListener('click', () => socket.emit("ball-control", { type: "stop" }));
+
       speedSlider.addEventListener('input', () => {
         const speed = parseInt(speedSlider.value, 10);
         speedValue.textContent = speed;
         socket.emit("ball-control", { type: "speed", value: speed });
       });
-      movePatternSelect.addEventListener('change', () => {
-        socket.emit("ball-control", { type: "movePattern", value: movePatternSelect.value });
+
+      movePatternSelect.addEventListener('change', () => socket.emit("ball-control", { type: "movePattern", value: movePatternSelect.value }));
+      audioToggle.addEventListener('change', () => socket.emit("ball-control", { type: "audioToggle", value: audioToggle.checked }));
+      ballColorSelect.addEventListener('change', () => socket.emit("ball-control", { type: "ballColor", value: ballColorSelect.value }));
+      bgColorSelect.addEventListener('change', () => socket.emit("ball-control", { type: "bgColor", value: bgColorSelect.value }));
+
+      // BGM関連のイベントリスナー
+      musicToggleBtn.addEventListener('click', async () => {
+        if (audioPlayer.paused) {
+          await playNextSong();
+        } else {
+          pauseMusic();
+        }
       });
-      audioToggle.addEventListener('change', () => {
-        socket.emit("ball-control", { type: "audioToggle", value: audioToggle.checked });
+      
+      volumeSlider.addEventListener('input', () => {
+          audioPlayer.volume = volumeSlider.value;
+          socket.emit('music-control', { type: 'volume', value: volumeSlider.value });
       });
-      ballColorSelect.addEventListener('change', () => {
-        socket.emit("ball-control", { type: "ballColor", value: ballColorSelect.value });
-      });
-      bgColorSelect.addEventListener('change', () => {
-        socket.emit("ball-control", { type: "bgColor", value: bgColorSelect.value });
+      
+      audioPlayer.addEventListener('ended', () => {
+          currentTrackIndex++;
+          playNextSong();
       });
 
-      // クライアントからボールの色変更通知を受け取る
+      // ▼▼▼ 修正点: キーボード操作の復活 ▼▼▼
+      document.addEventListener('keydown', (e) => {
+        // Enterキーで開始/停止をトグル
+        if (e.key === 'Enter') {
+          if (isBallMoving) {
+            stopBtn.click();
+          } else {
+            startBtn.click();
+          }
+        }
+        // 矢印キーで速度を調整
+        if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
+          e.preventDefault();
+          speedSlider.value = Math.min(parseInt(speedSlider.value) + 1, 100);
+          speedSlider.dispatchEvent(new Event('input')); // イベントを発火させてサーバーに通知
+        }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
+          e.preventDefault();
+          speedSlider.value = Math.max(parseInt(speedSlider.value) - 1, 1);
+          speedSlider.dispatchEvent(new Event('input')); // イベントを発火させてサーバーに通知
+        }
+      });
+      
+      // クライアントからのボールの色変更通知
       socket.on("ball-control", (data) => {
         if (data.type === "ballColor") {
           ballColorSelect.value = data.value;
         }
       });
 
-      // Renderのスリープ対策
-      setInterval(() => {
-        socket.emit('ping');
-      }, 30000);
-
-      // 接続状態の監視
-      socket.on('connect', () => {
-        console.log('サーバーに接続しました。 ID:', socket.id);
-      });
-      socket.on('disconnect', (reason) => {
-        console.log('サーバーから切断されました。理由:', reason);
-      });
+      // 接続維持と監視
+      setInterval(() => socket.emit('ping'), 30000);
+      socket.on('connect', () => console.log('サーバーに接続しました。 ID:', socket.id));
+      socket.on('disconnect', (reason) => console.log('サーバーから切断されました。理由:', reason));
 
       // --- 初期化処理 ---
       const ballColors = [ "#FFFFFF", "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#8AB5E6", "#E68D8A", "#B5E68A", "#4E7199", "#99514E", "#4E9967", "#FF0000", "#000000" ];
@@ -228,17 +227,12 @@
       }
       function getContrastYIQ(hexcolor) {
         hexcolor = hexcolor.replace("#", "");
-        const r = parseInt(hexcolor.substr(0,2),16);
-        const g = parseInt(hexcolor.substr(2,2),16);
-        const b = parseInt(hexcolor.substr(4,2),16);
-        const yiq = ((r*299)+(g*587)+(b*114))/1000;
-        return (yiq >= 128) ? 'black' : 'white';
+        const r = parseInt(hexcolor.substr(0,2),16), g = parseInt(hexcolor.substr(2,2),16), b = parseInt(hexcolor.substr(4,2),16);
+        return ((r*299)+(g*587)+(b*114))/1000 >= 128 ? 'black' : 'white';
       }
 
       populateColorSelect(ballColorSelect, ballColors);
       populateColorSelect(bgColorSelect, bgColors);
-      
-      // 初期状態でプレイリストをシャッフルしておく
       shuffledPlaylist = shufflePlaylist(musicPlaylist);
     });
   </script>
