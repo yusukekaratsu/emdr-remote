@@ -177,3 +177,40 @@
       socket.on('music-start', (data) => {
         if (!isSessionStarted) return; // セッション開始前は無視
         musicPlaylist = data.playlist;
+        currentTrackIndex = data.startIndex;
+        audioPlayer.volume = data.volume;
+        playSongAtIndex(currentTrackIndex);
+      });
+
+      // BGMの一時停止・再開・音量変更
+      socket.on('music-control', (data) => {
+        if (!isSessionStarted) return; // セッション開始前は無視
+        switch (data.type) {
+          case 'pause': audioPlayer.pause(); break;
+          case 'resume': audioPlayer.play().catch(e => console.error("再生再開エラー:", e)); break;
+          case 'volume': audioPlayer.volume = data.value; break;
+        }
+      });
+      
+      // 1曲終わったら自動で次の曲へ
+      audioPlayer.addEventListener('ended', () => {
+        currentTrackIndex++;
+        if (currentTrackIndex < musicPlaylist.length) {
+          playSongAtIndex(currentTrackIndex);
+        }
+      });
+      
+      // --- 接続維持と初期化 ---
+      setInterval(() => socket.emit('ping'), 30000);
+      socket.on('connect', () => console.log('サーバーに再接続しました。 ID:', socket.id));
+      socket.on('disconnect', (reason) => console.log('サーバーから切断されました。理由:', reason));
+      const ballColors = [ "#FFFFFF", "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#8AB5E6", "#E68D8A", "#B5E68A", "#4E7199", "#99514E", "#4E9967", "#FF0000", "#000000" ];
+      function populateColorSelect(selectElem,colorList){if(!selectElem)return;colorList.forEach(color=>{const option=document.createElement("option");option.value=color;option.textContent=`⬛ ${color}`;option.style.backgroundColor=color;option.style.color=getContrastYIQ(color)==="black"?"#000":"#fff";selectElem.appendChild(option)})}
+      function getContrastYIQ(hexcolor){hexcolor=hexcolor.replace("#","");const r=parseInt(hexcolor.substr(0,2),16),g=parseInt(hexcolor.substr(2,2),16),b=parseInt(hexcolor.substr(4,2),16);return((r*299)+(g*587)+(b*114))/1000>=128?'black':'white'}
+      populateColorSelect(clientBallColorSelect, ballColors);
+      clientBallColorSelect.value = "#FFFFFF"; 
+      window.addEventListener("resize", () => { if(!animationId){position = {x:(window.innerWidth-ballSize.width)/2,y:(window.innerHeight-ballSize.height)/2};ball.style.left = position.x + 'px'; ball.style.top = position.y + 'px';}});
+    });
+  </script>
+</body>
+</html>
