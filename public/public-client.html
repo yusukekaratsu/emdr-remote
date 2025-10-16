@@ -64,6 +64,17 @@
       background-color: #FFFFFF;
       visibility: hidden;
     }
+    #statusMessage {
+      position: absolute;
+      top: 20px;
+      width: 100%;
+      text-align: center;
+      color: #ffffff;
+      font-size: 18px;
+      z-index: 5;
+      opacity: 0;
+      transition: opacity 1s;
+    }
   </style>
 </head>
 <body>
@@ -77,6 +88,7 @@
   </div>
 
   <div id="ball"></div>
+  <div id="statusMessage">セラピストの準備を待っています...</div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
@@ -88,12 +100,14 @@
       const setupScreen = document.getElementById("setupScreen");
       const startSessionBtn = document.getElementById("startSessionBtn");
       const clientBallColorSelect = document.getElementById("clientBallColor");
+      const statusMessage = document.getElementById("statusMessage");
 
       // --- 状態管理 ---
       let isSessionStarted = false;
 
       // --- Audio関連 ---
       const audioPlayer = new Audio();
+      audioPlayer.volume = 1.0; // 初期音量を設定
       let musicPlaylist = [];
       let currentTrackIndex = 0;
       let audioContext, panner;
@@ -101,33 +115,123 @@
       const silentAudioDataUri = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
 
       // --- ボール状態 ---
-      // (変更なし、正常に動作するバージョンです)
-      const ballSize = { width: 50, height: 50 }; let position = { x: (window.innerWidth - ballSize.width) / 2, y: (window.innerHeight - ballSize.height) / 2 }; ball.style.left = position.x + "px"; ball.style.top = position.y + "px"; let direction = { x: 1, y: 0 }, speed = 5, animationId = null, movePattern = 'horizontal'; let isStopping = false, hasReachedEdge = false, stopProgress = 0; const stopDuration = 120; let returnStartPosition; const angle = 15, angleRad = angle * Math.PI / 180; const dirX = Math.cos(angleRad), dirY = Math.sin(angleRad); let panDirection = -1;
+      const ballSize = { width: 50, height: 50 };
+      let position = { x: (window.innerWidth - ballSize.width) / 2, y: (window.innerHeight - ballSize.height) / 2 };
+      ball.style.left = position.x + "px";
+      ball.style.top = position.y + "px";
+      let direction = { x: 1, y: 0 }, speed = 5, animationId = null, movePattern = 'horizontal';
+      let isStopping = false, hasReachedEdge = false, stopProgress = 0;
+      const stopDuration = 120;
+      let returnStartPosition;
+      const angle = 15, angleRad = angle * Math.PI / 180;
+      const dirX = Math.cos(angleRad), dirY = Math.sin(angleRad);
+      let panDirection = -1;
 
       // --- 関数定義 ---
-      // (ボール関連の関数は変更なし)
-      function initAudio() { if (isAudioInitialized) return; try { audioContext = new (window.AudioContext || window.webkitAudioContext)(); panner = audioContext.createStereoPanner(); panner.connect(audioContext.destination); isAudioInitialized = true; } catch (e) { console.error("Web Audio API is not supported."); } }
-      function playCollisionSound() { if (!isAudioEnabled || !isAudioInitialized) return; if (audioContext.state === 'suspended') audioContext.resume(); const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(440, audioContext.currentTime); oscillator.connect(gainNode).connect(panner); panner.pan.setValueAtTime(panDirection, audioContext.currentTime); gainNode.gain.setValueAtTime(0.5, audioContext.currentTime); gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.1); oscillator.start(audioContext.currentTime); oscillator.stop(audioContext.currentTime + 0.1); panDirection *= -1; }
-      function updateDirection() { switch (movePattern) { case 'horizontal': direction = { x: 1, y: 0 }; break; case 'diagonal1': direction = { x: dirX, y: dirY }; break; case 'diagonal2': direction = { x: -dirX, y: dirY }; break; } }
-      function stopBall() { if (animationId && !isStopping) { isStopping = true; hasReachedEdge = false; } }
-      function moveBall() { const screen = { width: window.innerWidth, height: window.innerHeight }; if (isStopping) { if (!hasReachedEdge) { position.x += direction.x * speed; position.y += direction.y * speed; if (position.x <= 0 || position.x + ballSize.width >= screen.width || position.y <= 0 || position.y + ballSize.height >= screen.height) { playCollisionSound(); hasReachedEdge = true; returnStartPosition = { ...position }; stopProgress = 0; } } else { const center = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 }; stopProgress += 1 / stopDuration; const ease = 1 - Math.pow(1 - stopProgress, 3); position.x = returnStartPosition.x + (center.x - returnStartPosition.x) * ease; position.y = returnStartPosition.y + (center.y - returnStartPosition.y) * ease; if (stopProgress >= 1) { position = center; cancelAnimationFrame(animationId); animationId = null; isStopping = false; ball.style.left = position.x + "px"; ball.style.top = position.y + "px"; return; } } } else { position.x += direction.x * speed; position.y += direction.y * speed; if (movePattern === 'horizontal') { if (position.x <= 0 || position.x + ballSize.width >= screen.width) { direction.x *= -1; playCollisionSound(); } } else { if (position.x <= 0 || position.x + ballSize.width >= screen.width || position.y <= 0 || position.y + ballSize.height >= screen.height) { direction.x *= -1; direction.y *= -1; playCollisionSound(); } } } position.x = Math.max(0, Math.min(position.x, screen.width - ballSize.width)); position.y = Math.max(0, Math.min(position.y, screen.height - ballSize.height)); ball.style.left = position.x + "px"; ball.style.top = position.y + "px"; if (animationId) animationId = requestAnimationFrame(moveBall); }
+      function initAudio() {
+        if (isAudioInitialized) return;
+        try {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          panner = audioContext.createStereoPanner();
+          panner.connect(audioContext.destination);
+          isAudioInitialized = true;
+        } catch (e) {
+          console.error("Web Audio API is not supported.");
+        }
+      }
 
-      // ▼▼▼ 変更点2: ChatGPTの指摘を反映した再生関数 ▼▼▼
+      function playCollisionSound() {
+        if (!isAudioEnabled || !isAudioInitialized) return;
+        if (audioContext.state === 'suspended') audioContext.resume();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
+        oscillator.connect(gainNode).connect(panner);
+        panner.pan.setValueAtTime(panDirection, audioContext.currentTime);
+        gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.1);
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.1);
+        panDirection *= -1;
+      }
+
+      function updateDirection() {
+        switch (movePattern) {
+          case 'horizontal': direction = { x: 1, y: 0 }; break;
+          case 'diagonal1': direction = { x: dirX, y: dirY }; break;
+          case 'diagonal2': direction = { x: -dirX, y: dirY }; break;
+        }
+      }
+
+      function stopBall() {
+        if (animationId && !isStopping) {
+          isStopping = true;
+          hasReachedEdge = false;
+        }
+      }
+
+      function moveBall() {
+        const screen = { width: window.innerWidth, height: window.innerHeight };
+        if (isStopping) {
+          if (!hasReachedEdge) {
+            position.x += direction.x * speed;
+            position.y += direction.y * speed;
+            if (position.x <= 0 || position.x + ballSize.width >= screen.width || position.y <= 0 || position.y + ballSize.height >= screen.height) {
+              playCollisionSound();
+              hasReachedEdge = true;
+              returnStartPosition = { ...position };
+              stopProgress = 0;
+            }
+          } else {
+            const center = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 };
+            stopProgress += 1 / stopDuration;
+            const ease = 1 - Math.pow(1 - stopProgress, 3);
+            position.x = returnStartPosition.x + (center.x - returnStartPosition.x) * ease;
+            position.y = returnStartPosition.y + (center.y - returnStartPosition.y) * ease;
+            if (stopProgress >= 1) {
+              position = center;
+              cancelAnimationFrame(animationId);
+              animationId = null;
+              isStopping = false;
+              ball.style.left = position.x + "px";
+              ball.style.top = position.y + "px";
+              return;
+            }
+          }
+        } else {
+          position.x += direction.x * speed;
+          position.y += direction.y * speed;
+          if (movePattern === 'horizontal') {
+            if (position.x <= 0 || position.x + ballSize.width >= screen.width) {
+              direction.x *= -1; playCollisionSound();
+            }
+          } else {
+            if (position.x <= 0 || position.x + ballSize.width >= screen.width || position.y <= 0 || position.y + ballSize.height >= screen.height) {
+              direction.x *= -1; direction.y *= -1; playCollisionSound();
+            }
+          }
+        }
+        position.x = Math.max(0, Math.min(position.x, screen.width - ballSize.width));
+        position.y = Math.max(0, Math.min(position.y, screen.height - ballSize.height));
+        ball.style.left = position.x + "px";
+        ball.style.top = position.y + "px";
+        if (animationId) animationId = requestAnimationFrame(moveBall);
+      }
+
       function playSongAtIndex(index) {
         if (index < musicPlaylist.length) {
           const trackToPlay = musicPlaylist[index];
           audioPlayer.src = trackToPlay;
-          audioPlayer.load(); // 🎵 明示的に音源をロードする
+          audioPlayer.load();
           audioPlayer.play()
             .then(() => console.log("BGM再生開始:", trackToPlay))
             .catch(e => console.error("BGMの再生に失敗しました:", e));
         }
       }
-      
-      // --- イベントリスナー ---
-      
+
+      // --- イベント ---
       startSessionBtn.addEventListener("click", () => {
-        // --- ステップ1: UIを即座に応答させる ---
         isSessionStarted = true;
         ball.style.visibility = 'visible';
         const selectedColor = clientBallColorSelect.value;
@@ -136,42 +240,119 @@
         setupScreen.style.opacity = '0';
         setTimeout(() => { setupScreen.style.display = 'none'; }, 500);
 
-        // ▼▼▼ 変更点1: ChatGPTの指摘を反映した再生許可の取得処理 ▼▼▼
-        // --- ステップ2: UIの応答後に、音声の準備を確実に行う ---
-        // 衝突音
+        // ステータスメッセージ表示
+        statusMessage.style.opacity = '1';
+
+        // オーディオ初期化
         initAudio();
         if (audioContext && audioContext.state === 'suspended') {
           audioContext.resume().catch(e => console.warn("AudioContextの再開に失敗:", e));
         }
 
-        // BGM (🎵 これが最も確実な再生許可の取得方法です)
+        // BGM再生許可取得
         audioPlayer.src = silentAudioDataUri;
         audioPlayer.play().then(() => {
           audioPlayer.pause();
-          console.log("BGM再生許可を完全に取得しました。セラピストの指示を待っています。");
+          console.log("BGM再生許可を取得。");
         }).catch(error => {
-          console.error("BGM再生許可の取得に失敗しました。BGMは再生されません。", error);
-          alert("音声の再生が許可されませんでした。ブラウザの設定をご確認ください。");
+          console.error("BGM再生許可取得に失敗:", error);
+          alert("音声の再生が許可されませんでした。ブラウザ設定を確認してください。");
         });
       });
 
-      // (以降のsocket.onリスナーは変更なし)
-      socket.on("ball-control", (data) => { if (!isSessionStarted) return; switch (data.type) { case "start": isStopping=false; hasReachedEdge=false; if(!animationId){updateDirection();animationId=requestAnimationFrame(moveBall)} break; case "stop": stopBall(); break; case "audioToggle": isAudioEnabled=data.value; if(isAudioEnabled&&!isAudioInitialized)initAudio(); break; case "movePattern": movePattern=data.value; updateDirection(); break; case "speed": speed=data.value; break; case "ballColor": ball.style.backgroundColor=data.value; clientBallColorSelect.value=data.value; break; case "bgColor": document.body.style.backgroundColor=data.value; break; }});
-      socket.on('music-start', (data) => { if (!isSessionStarted) return; musicPlaylist = data.playlist; currentTrackIndex = data.startIndex; audioPlayer.volume = data.volume; playSongAtIndex(currentTrackIndex); });
-      socket.on('music-control', (data) => { if (!isSessionStarted) return; switch (data.type) { case 'pause': audioPlayer.pause(); break; case 'resume': audioPlayer.play().catch(e => console.error("再生再開エラー:", e)); break; case 'volume': audioPlayer.volume = data.value; break; }});
-      audioPlayer.addEventListener('ended', () => { currentTrackIndex++; if (currentTrackIndex < musicPlaylist.length) { playSongAtIndex(currentTrackIndex); }});
-      
-      // --- 接続維持と初期化 ---
-      // (変更なし)
+      // --- Visibility APIでAudioContext自動復帰 ---
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible" && audioContext?.state === "suspended") {
+          audioContext.resume();
+        }
+      });
+
+      // --- Socket通信 ---
+      socket.on("ball-control", (data) => {
+        if (!isSessionStarted) return;
+        switch (data.type) {
+          case "start": isStopping = false; hasReachedEdge = false; if (!animationId) { updateDirection(); animationId = requestAnimationFrame(moveBall) } break;
+          case "stop": stopBall(); break;
+          case "audioToggle": isAudioEnabled = data.value; if (isAudioEnabled && !isAudioInitialized) initAudio(); break;
+          case "movePattern": movePattern = data.value; updateDirection(); break;
+          case "speed": speed = data.value; break;
+          case "ballColor": ball.style.backgroundColor = data.value; clientBallColorSelect.value = data.value; break;
+          case "bgColor": document.body.style.backgroundColor = data.value; break;
+        }
+      });
+
+      socket.on('music-start', (data) => {
+        if (!isSessionStarted) return;
+        if (!data.playlist || data.playlist.length === 0) {
+          console.warn("受信したプレイリストが空です。");
+          return;
+        }
+        musicPlaylist = data.playlist;
+        currentTrackIndex = data.startIndex;
+        audioPlayer.volume = data.volume ?? 1.0;
+        playSongAtIndex(currentTrackIndex);
+      });
+
+      socket.on('music-control', (data) => {
+        if (!isSessionStarted) return;
+        switch (data.type) {
+          case 'pause': audioPlayer.pause(); break;
+          case 'resume': audioPlayer.play().catch(e => console.error("再生再開エラー:", e)); break;
+          case 'volume': audioPlayer.volume = data.value; break;
+        }
+      });
+
+      audioPlayer.addEventListener('ended', () => {
+        currentTrackIndex++;
+        if (currentTrackIndex < musicPlaylist.length) playSongAtIndex(currentTrackIndex);
+      });
+
+      // 接続維持
       setInterval(() => socket.emit('ping'), 30000);
       socket.on('connect', () => console.log('サーバーに再接続しました。 ID:', socket.id));
       socket.on('disconnect', (reason) => console.log('サーバーから切断されました。理由:', reason));
-      const ballColors = [ "#FFFFFF", "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#8AB5E6", "#E68D8A", "#B5E68A", "#4E7199", "#99514E", "#4E9967", "#FF0000", "#000000" ];
-      function populateColorSelect(selectElem,colorList){if(!selectElem)return;colorList.forEach(color=>{const option=document.createElement("option");option.value=color;option.textContent=`⬛ ${color}`;option.style.backgroundColor=color;option.style.color=getContrastYIQ(color)==="black"?"#000":"#fff";selectElem.appendChild(option)})}
-      function getContrastYIQ(hexcolor){hexcolor=hexcolor.replace("#","");const r=parseInt(hexcolor.substr(0,2),16),g=parseInt(hexcolor.substr(2,2),16),b=parseInt(hexcolor.substr(4,2),16);return((r*299)+(g*587)+(b*114))/1000>=128?'black':'white'}
+
+      // 色リスト
+      const ballColors = [
+        "#FFFFFF", "#FFE3CB", "#FFB3BF", "#F5CEE6",
+        "#C5F2FF", "#C3D4F3", "#BCE0DF", "#DFF5D6",
+        "#FFFAD1", "#8AB5E6", "#E68D8A", "#B5E68A",
+        "#4E7199", "#99514E", "#4E9967", "#FF0000", "#000000"
+      ];
+
+      function populateColorSelect(selectElem, colorList) {
+        if (!selectElem) return;
+        colorList.forEach(color => {
+          const option = document.createElement("option");
+          option.value = color;
+          option.textContent = `⬛ ${color}`;
+          option.style.backgroundColor = color;
+          option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff";
+          selectElem.appendChild(option);
+        });
+      }
+
+      function getContrastYIQ(hexcolor) {
+        hexcolor = hexcolor.replace("#", "");
+        const r = parseInt(hexcolor.substr(0, 2), 16),
+              g = parseInt(hexcolor.substr(2, 2), 16),
+              b = parseInt(hexcolor.substr(4, 2), 16);
+        return ((r * 299) + (g * 587) + (b * 114)) / 1000 >= 128 ? 'black' : 'white';
+      }
+
       populateColorSelect(clientBallColorSelect, ballColors);
-      clientBallColorSelect.value = "#FFFFFF"; 
-      window.addEventListener("resize", () => { if(!animationId){position = {x:(window.innerWidth-ballSize.width)/2,y:(window.innerHeight-ballSize.height)/2};ball.style.left = position.x + 'px'; ball.style.top = position.y + 'px';}});
+      clientBallColorSelect.value = "#FFFFFF";
+
+      window.addEventListener("resize", () => {
+        if (!animationId) {
+          position = {
+            x: (window.innerWidth - ballSize.width) / 2,
+            y: (window.innerHeight - ballSize.height) / 2
+          };
+          ball.style.left = position.x + 'px';
+          ball.style.top = position.y + 'px';
+        }
+      });
     });
   </script>
 </body>
