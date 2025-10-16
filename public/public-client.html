@@ -1,359 +1,128 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <title>EMDR Client</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>クライエント画面 | 東信こころの相談室</title>
   <style>
-    html, body { 
-      margin: 0; 
-      padding: 0; 
-      height: 100%; 
-      overflow: hidden; 
-      font-family: sans-serif; 
-      background-color: #000000;
-    }
-    #setupScreen {
-      position: absolute;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      background-color: #f0f0f0;
-      z-index: 20;
+    body {
+      margin: 0;
+      background: #000;
+      overflow: hidden;
+      font-family: sans-serif;
       display: flex;
       flex-direction: column;
-      justify-content: center;
       align-items: center;
-      transition: opacity 0.5s;
+      justify-content: center;
+      height: 100vh;
     }
-    #colorChooser {
-      background-color: white;
-      padding: 25px 35px;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      text-align: center;
-    }
-    #colorChooser label {
-      font-size: 18px;
-      color: #333;
-    }
-    #colorChooser select {
-      margin-top: 15px;
-      padding: 8px;
-      font-size: 16px;
-      min-width: 180px;
-    }
-    #startSessionBtn {
-      margin-top: 30px;
-      padding: 15px 40px;
-      font-size: 18px;
-      font-weight: bold;
-      cursor: pointer;
-      border-radius: 8px;
-      border: none;
-      background-color: #5c67f2;
-      color: white;
-      transition: background-color 0.2s;
-    }
-    #startSessionBtn:hover {
-      background-color: #4a54c2;
-    }
-    #ball { 
-      width: 50px; 
-      height: 50px; 
-      border-radius: 50%; 
-      position: absolute;
-      background-color: #FFFFFF;
-      visibility: hidden;
+    #canvas { background: #000; }
+    #settings { color: white; text-align: center; }
+    button {
+      padding: 10px 20px; margin: 10px; font-size: 16px;
+      border-radius: 8px; border: none; cursor: pointer;
     }
     #statusMessage {
-      position: absolute;
-      top: 20px;
-      width: 100%;
+      color: white;
       text-align: center;
-      color: #ffffff;
-      font-size: 18px;
-      z-index: 5;
-      opacity: 0;
-      transition: opacity 1s;
+      margin-top: 10px;
+      font-size: 14px;
+      opacity: 0.8;
     }
   </style>
 </head>
 <body>
-
-  <div id="setupScreen">
-    <div id="colorChooser">
-      <label for="clientBallColor">ボールの色を選んでください</label><br>
-      <select id="clientBallColor"></select>
-    </div>
-    <button id="startSessionBtn">セッションを開始</button>
+  <div id="settings">
+    <h2>セッション準備</h2>
+    <label>お名前（任意）:<br><input id="clientName" placeholder="例：Aさん"></label><br>
+    <button id="startSession">セッション開始</button>
+    <div id="statusMessage"></div>
   </div>
 
-  <div id="ball"></div>
-  <div id="statusMessage">セラピストの準備を待っています...</div>
+  <canvas id="canvas" width="800" height="400" style="display:none;"></canvas>
+  <audio id="audioPlayer" crossorigin="anonymous"></audio>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const socket = io();
+    const socket = io();
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const startButton = document.getElementById('startSession');
+    const audioPlayer = document.getElementById('audioPlayer');
+    const statusMessage = document.getElementById('statusMessage');
+    let audioContext;
+    let isSessionStarted = false;
 
-      // --- DOM要素 ---
-      const ball = document.getElementById("ball");
-      const setupScreen = document.getElementById("setupScreen");
-      const startSessionBtn = document.getElementById("startSessionBtn");
-      const clientBallColorSelect = document.getElementById("clientBallColor");
-      const statusMessage = document.getElementById("statusMessage");
+    // 🎧 AudioContextを確実に再開する関数
+    async function resumeAudioContext() {
+      try {
+        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioContext.state === "suspended") await audioContext.resume();
 
-      // --- 状態管理 ---
-      let isSessionStarted = false;
+        // 無音を鳴らす
+        const silentBuffer = audioContext.createBuffer(1, 1, 22050);
+        const silentSource = audioContext.createBufferSource();
+        silentSource.buffer = silentBuffer;
+        silentSource.connect(audioContext.destination);
+        silentSource.start(0);
+        console.log("AudioContext resumed.");
+        return true;
+      } catch (err) {
+        console.error("AudioContext再開に失敗:", err);
+        return false;
+      }
+    }
 
-      // --- Audio関連 ---
-      const audioPlayer = new Audio();
-      audioPlayer.volume = 1.0; // 初期音量を設定
-      let musicPlaylist = [];
-      let currentTrackIndex = 0;
-      let audioContext, panner;
-      let isAudioEnabled = false, isAudioInitialized = false;
-      const silentAudioDataUri = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+    // 🟢 セッション開始ボタン押下
+    startButton.addEventListener('click', async () => {
+      statusMessage.innerText = "音声再生の許可を確認しています...";
+      const unlocked = await resumeAudioContext();
 
-      // --- ボール状態 ---
-      const ballSize = { width: 50, height: 50 };
-      let position = { x: (window.innerWidth - ballSize.width) / 2, y: (window.innerHeight - ballSize.height) / 2 };
-      ball.style.left = position.x + "px";
-      ball.style.top = position.y + "px";
-      let direction = { x: 1, y: 0 }, speed = 5, animationId = null, movePattern = 'horizontal';
-      let isStopping = false, hasReachedEdge = false, stopProgress = 0;
-      const stopDuration = 120;
-      let returnStartPosition;
-      const angle = 15, angleRad = angle * Math.PI / 180;
-      const dirX = Math.cos(angleRad), dirY = Math.sin(angleRad);
-      let panDirection = -1;
-
-      // --- 関数定義 ---
-      function initAudio() {
-        if (isAudioInitialized) return;
-        try {
-          audioContext = new (window.AudioContext || window.webkitAudioContext)();
-          panner = audioContext.createStereoPanner();
-          panner.connect(audioContext.destination);
-          isAudioInitialized = true;
-        } catch (e) {
-          console.error("Web Audio API is not supported.");
-        }
+      if (!unlocked) {
+        statusMessage.innerText = "ブラウザが音声再生を許可していません。ページを再読み込みして再試行してください。";
+        return;
       }
 
-      function playCollisionSound() {
-        if (!isAudioEnabled || !isAudioInitialized) return;
-        if (audioContext.state === 'suspended') audioContext.resume();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
-        oscillator.connect(gainNode).connect(panner);
-        panner.pan.setValueAtTime(panDirection, audioContext.currentTime);
-        gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.1);
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.1);
-        panDirection *= -1;
+      document.getElementById('settings').style.display = 'none';
+      canvas.style.display = 'block';
+      statusMessage.innerText = "セラピストの準備を待っています...";
+      isSessionStarted = true;
+      socket.emit('client-joined', { name: clientName.value || "匿名クライエント" });
+    });
+
+    // 🌀 タブ復帰時にAudioContextを再開
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && audioContext?.state === "suspended") {
+        audioContext.resume();
       }
+    });
 
-      function updateDirection() {
-        switch (movePattern) {
-          case 'horizontal': direction = { x: 1, y: 0 }; break;
-          case 'diagonal1': direction = { x: dirX, y: dirY }; break;
-          case 'diagonal2': direction = { x: -dirX, y: dirY }; break;
-        }
+    // 🎵 セラピスト側から音楽再生指示
+    socket.on('music-start', (data) => {
+      if (!isSessionStarted) return;
+      if (!data.playlist || data.playlist.length === 0) {
+        console.warn("受信したプレイリストが空です。");
+        return;
       }
-
-      function stopBall() {
-        if (animationId && !isStopping) {
-          isStopping = true;
-          hasReachedEdge = false;
-        }
-      }
-
-      function moveBall() {
-        const screen = { width: window.innerWidth, height: window.innerHeight };
-        if (isStopping) {
-          if (!hasReachedEdge) {
-            position.x += direction.x * speed;
-            position.y += direction.y * speed;
-            if (position.x <= 0 || position.x + ballSize.width >= screen.width || position.y <= 0 || position.y + ballSize.height >= screen.height) {
-              playCollisionSound();
-              hasReachedEdge = true;
-              returnStartPosition = { ...position };
-              stopProgress = 0;
-            }
-          } else {
-            const center = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 };
-            stopProgress += 1 / stopDuration;
-            const ease = 1 - Math.pow(1 - stopProgress, 3);
-            position.x = returnStartPosition.x + (center.x - returnStartPosition.x) * ease;
-            position.y = returnStartPosition.y + (center.y - returnStartPosition.y) * ease;
-            if (stopProgress >= 1) {
-              position = center;
-              cancelAnimationFrame(animationId);
-              animationId = null;
-              isStopping = false;
-              ball.style.left = position.x + "px";
-              ball.style.top = position.y + "px";
-              return;
-            }
-          }
-        } else {
-          position.x += direction.x * speed;
-          position.y += direction.y * speed;
-          if (movePattern === 'horizontal') {
-            if (position.x <= 0 || position.x + ballSize.width >= screen.width) {
-              direction.x *= -1; playCollisionSound();
-            }
-          } else {
-            if (position.x <= 0 || position.x + ballSize.width >= screen.width || position.y <= 0 || position.y + ballSize.height >= screen.height) {
-              direction.x *= -1; direction.y *= -1; playCollisionSound();
-            }
-          }
-        }
-        position.x = Math.max(0, Math.min(position.x, screen.width - ballSize.width));
-        position.y = Math.max(0, Math.min(position.y, screen.height - ballSize.height));
-        ball.style.left = position.x + "px";
-        ball.style.top = position.y + "px";
-        if (animationId) animationId = requestAnimationFrame(moveBall);
-      }
-
-      function playSongAtIndex(index) {
-        if (index < musicPlaylist.length) {
-          const trackToPlay = musicPlaylist[index];
-          audioPlayer.src = trackToPlay;
-          audioPlayer.load();
-          audioPlayer.play()
-            .then(() => console.log("BGM再生開始:", trackToPlay))
-            .catch(e => console.error("BGMの再生に失敗しました:", e));
-        }
-      }
-
-      // --- イベント ---
-      startSessionBtn.addEventListener("click", () => {
-        isSessionStarted = true;
-        ball.style.visibility = 'visible';
-        const selectedColor = clientBallColorSelect.value;
-        ball.style.backgroundColor = selectedColor;
-        socket.emit("ball-control", { type: "ballColor", value: selectedColor });
-        setupScreen.style.opacity = '0';
-        setTimeout(() => { setupScreen.style.display = 'none'; }, 500);
-
-        // ステータスメッセージ表示
-        statusMessage.style.opacity = '1';
-
-        // オーディオ初期化
-        initAudio();
-        if (audioContext && audioContext.state === 'suspended') {
-          audioContext.resume().catch(e => console.warn("AudioContextの再開に失敗:", e));
-        }
-
-        // BGM再生許可取得
-        audioPlayer.src = silentAudioDataUri;
-        audioPlayer.play().then(() => {
-          audioPlayer.pause();
-          console.log("BGM再生許可を取得。");
-        }).catch(error => {
-          console.error("BGM再生許可取得に失敗:", error);
-          alert("音声の再生が許可されませんでした。ブラウザ設定を確認してください。");
-        });
-      });
-
-      // --- Visibility APIでAudioContext自動復帰 ---
-      document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible" && audioContext?.state === "suspended") {
-          audioContext.resume();
-        }
-      });
-
-      // --- Socket通信 ---
-      socket.on("ball-control", (data) => {
-        if (!isSessionStarted) return;
-        switch (data.type) {
-          case "start": isStopping = false; hasReachedEdge = false; if (!animationId) { updateDirection(); animationId = requestAnimationFrame(moveBall) } break;
-          case "stop": stopBall(); break;
-          case "audioToggle": isAudioEnabled = data.value; if (isAudioEnabled && !isAudioInitialized) initAudio(); break;
-          case "movePattern": movePattern = data.value; updateDirection(); break;
-          case "speed": speed = data.value; break;
-          case "ballColor": ball.style.backgroundColor = data.value; clientBallColorSelect.value = data.value; break;
-          case "bgColor": document.body.style.backgroundColor = data.value; break;
-        }
-      });
-
-      socket.on('music-start', (data) => {
-        if (!isSessionStarted) return;
-        if (!data.playlist || data.playlist.length === 0) {
-          console.warn("受信したプレイリストが空です。");
-          return;
-        }
-        musicPlaylist = data.playlist;
-        currentTrackIndex = data.startIndex;
-        audioPlayer.volume = data.volume ?? 1.0;
-        playSongAtIndex(currentTrackIndex);
-      });
-
-      socket.on('music-control', (data) => {
-        if (!isSessionStarted) return;
-        switch (data.type) {
-          case 'pause': audioPlayer.pause(); break;
-          case 'resume': audioPlayer.play().catch(e => console.error("再生再開エラー:", e)); break;
-          case 'volume': audioPlayer.volume = data.value; break;
-        }
-      });
-
-      audioPlayer.addEventListener('ended', () => {
-        currentTrackIndex++;
-        if (currentTrackIndex < musicPlaylist.length) playSongAtIndex(currentTrackIndex);
-      });
-
-      // 接続維持
-      setInterval(() => socket.emit('ping'), 30000);
-      socket.on('connect', () => console.log('サーバーに再接続しました。 ID:', socket.id));
-      socket.on('disconnect', (reason) => console.log('サーバーから切断されました。理由:', reason));
-
-      // 色リスト
-      const ballColors = [
-        "#FFFFFF", "#FFE3CB", "#FFB3BF", "#F5CEE6",
-        "#C5F2FF", "#C3D4F3", "#BCE0DF", "#DFF5D6",
-        "#FFFAD1", "#8AB5E6", "#E68D8A", "#B5E68A",
-        "#4E7199", "#99514E", "#4E9967", "#FF0000", "#000000"
-      ];
-
-      function populateColorSelect(selectElem, colorList) {
-        if (!selectElem) return;
-        colorList.forEach(color => {
-          const option = document.createElement("option");
-          option.value = color;
-          option.textContent = `⬛ ${color}`;
-          option.style.backgroundColor = color;
-          option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff";
-          selectElem.appendChild(option);
-        });
-      }
-
-      function getContrastYIQ(hexcolor) {
-        hexcolor = hexcolor.replace("#", "");
-        const r = parseInt(hexcolor.substr(0, 2), 16),
-              g = parseInt(hexcolor.substr(2, 2), 16),
-              b = parseInt(hexcolor.substr(4, 2), 16);
-        return ((r * 299) + (g * 587) + (b * 114)) / 1000 >= 128 ? 'black' : 'white';
-      }
-
-      populateColorSelect(clientBallColorSelect, ballColors);
-      clientBallColorSelect.value = "#FFFFFF";
-
-      window.addEventListener("resize", () => {
-        if (!animationId) {
-          position = {
-            x: (window.innerWidth - ballSize.width) / 2,
-            y: (window.innerHeight - ballSize.height) / 2
-          };
-          ball.style.left = position.x + 'px';
-          ball.style.top = position.y + 'px';
-        }
+      console.log("音楽再生開始:", data.playlist[0]);
+      audioPlayer.src = data.playlist[0];
+      audioPlayer.loop = true;
+      audioPlayer.volume = 1.0;
+      audioPlayer.play().then(() => {
+        statusMessage.innerText = "音楽再生中...";
+      }).catch(err => {
+        console.warn("音楽再生に失敗:", err);
+        statusMessage.innerText = "音楽の自動再生に失敗しました。再生ボタンを押してください。";
       });
     });
+
+    // 🟥 セラピスト側から停止命令
+    socket.on('music-stop', () => {
+      audioPlayer.pause();
+      audioPlayer.currentTime = 0;
+      statusMessage.innerText = "音楽が停止しました。";
+    });
+
   </script>
 </body>
 </html>
