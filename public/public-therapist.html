@@ -14,7 +14,6 @@
     #stopBtn { background-color: #f25c5c; }
     #stopBtn:hover { background-color: #c24a4a; }
     .toggle-switch { display: flex; align-items: center; gap: 10px; }
-    .toggle-switch span { font-size: 14px; }
     #volumeSlider { width: 120px; vertical-align: middle; }
     #musicToggleBtn { width: auto; padding: 10px 20px; }
   </style>
@@ -27,41 +26,26 @@
       <button id="startBtn">開始</button>
       <button id="stopBtn">停止</button>
     </div>
-    
     <div class="control-group">
       <label for="movePattern">動きのパターン</label>
-      <select id="movePattern">
-        <option value="horizontal">水平</option>
-        <option value="diagonal1">斜め（＼）</option>
-        <option value="diagonal2">斜め（／）</option>
-      </select>
+      <select id="movePattern"><option value="horizontal">水平</option><option value="diagonal1">斜め（＼）</option><option value="diagonal2">斜め（／）</option></select>
     </div>
-
     <div class="control-group">
       <label for="speedSlider">速さ: <span id="speedValue">5</span></label>
       <input type="range" id="speedSlider" min="1" max="100" value="5" />
     </div>
-
     <div class="control-group">
       <label>ボールと背景の色</label>
       <select id="ballColor"></select>
       <select id="bgColor"></select>
     </div>
-
     <div class="control-group">
       <label>サウンド</label>
-      <div class="toggle-switch">
-        <span>衝突音</span>
-        <input type="checkbox" id="audioToggle" />
-      </div>
+      <div class="toggle-switch"><span>衝突音</span><input type="checkbox" id="audioToggle" /></div>
     </div>
-    
     <div class="control-group">
       <label>BGM操作</label>
-      <div>
-        <button id="musicToggleBtn">再生</button>
-        <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.5" title="音量">
-      </div>
+      <div><button id="musicToggleBtn">再生</button><input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.5" title="音量"></div>
     </div>
   </div>
 
@@ -71,163 +55,73 @@
       const socket = io();
 
       // --- DOM要素 ---
-      const startBtn = document.getElementById('startBtn');
-      const stopBtn = document.getElementById('stopBtn');
-      const speedSlider = document.getElementById('speedSlider');
-      const speedValue = document.getElementById('speedValue');
-      const movePatternSelect = document.getElementById('movePattern');
-      const audioToggle = document.getElementById('audioToggle');
-      const ballColorSelect = document.getElementById('ballColor');
-      const bgColorSelect = document.getElementById('bgColor');
-      const musicToggleBtn = document.getElementById('musicToggleBtn');
-      const volumeSlider = document.getElementById('volumeSlider');
-      
-      // --- 状態管理 ---
+      const startBtn = document.getElementById('startBtn'), stopBtn = document.getElementById('stopBtn'), speedSlider = document.getElementById('speedSlider'), speedValue = document.getElementById('speedValue'), movePatternSelect = document.getElementById('movePattern'), audioToggle = document.getElementById('audioToggle'), ballColorSelect = document.getElementById('ballColor'), bgColorSelect = document.getElementById('bgColor'), musicToggleBtn = document.getElementById('musicToggleBtn'), volumeSlider = document.getElementById('volumeSlider');
       let isBallMoving = false;
 
       // --- BGM関連 ---
       const audioPlayer = new Audio();
-      const musicPlaylist = [
-          '/audio/1 Blue Berry Pufffin.mp3', '/audio/2 A Step In The River.mp3',
-          '/audio/3 Peak\'s Performance.mp3', '/audio/4 Jazz Hoyt.mp3',
-          '/audio/5 Pop\'s Trilogy.mp3', '/audio/6 Redemption.mp3',
-          '/audio/7 Oceanic Fellings.mp3', '/audio/8 Paco Bell.mp3',
-          '/audio/9 Round The Lake.mp3', '/audio/10 Piano R Squared.mp3',
-          '/audio/11 New (No) Frills - Shaken, Not Stirred.mp3'
-      ];
+      const musicPlaylist = ['/audio/1 Blue Berry Pufffin.mp3', '/audio/2 A Step In The River.mp3', '/audio/3 Peak\'s Performance.mp3', '/audio/4 Jazz Hoyt.mp3', '/audio/5 Pop\'s Trilogy.mp3', '/audio/6 Redemption.mp3', '/audio/7 Oceanic Fellings.mp3', '/audio/8 Paco Bell.mp3', '/audio/9 Round The Lake.mp3', '/audio/10 Piano R Squared.mp3', '/audio/11 New (No) Frills - Shaken, Not Stirred.mp3'];
       let shuffledPlaylist = [];
       let currentTrackIndex = 0;
 
       // --- 関数定義 ---
-      function shufflePlaylist(array) {
-          const newArray = [...array];
-          for (let i = newArray.length - 1; i > 0; i--) {
-              const j = Math.floor(Math.random() * (i + 1));
-              [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-          }
-          return newArray;
-      }
-      
-      function playSongAtIndex(index) {
-        if (index < shuffledPlaylist.length) {
-          const trackToPlay = shuffledPlaylist[index];
-          audioPlayer.src = trackToPlay;
-          audioPlayer.play().catch(e => console.error("セラピスト側での再生エラー:", e));
+      function shufflePlaylist(array) { const newArray = [...array]; for (let i = newArray.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [newArray[i], newArray[j]] = [newArray[j], newArray[i]]; } return newArray; }
+
+      function playNextSong() {
+        if (shuffledPlaylist.length === 0 || currentTrackIndex >= shuffledPlaylist.length) {
+          shuffledPlaylist = shufflePlaylist(musicPlaylist);
+          currentTrackIndex = 0;
         }
+        const trackToPlay = shuffledPlaylist[currentTrackIndex];
+        audioPlayer.src = trackToPlay;
+        audioPlayer.volume = volumeSlider.value;
+        audioPlayer.play();
+        
+        // クライアントに「この曲を再生して」と指示
+        socket.emit('music-play', { src: trackToPlay, volume: audioPlayer.volume });
+        musicToggleBtn.textContent = '停止';
+      }
+
+      function pauseMusic() {
+        audioPlayer.pause();
+        socket.emit('music-pause'); // クライアントに「一時停止して」と指示
+        musicToggleBtn.textContent = '再生';
       }
 
       // --- イベントリスナー ---
-      startBtn.addEventListener('click', () => {
-        isBallMoving = true;
-        socket.emit("ball-control", { type: "start" });
-      });
-
-      stopBtn.addEventListener('click', () => {
-        isBallMoving = false;
-        socket.emit("ball-control", { type: "stop" });
-      });
-
-      speedSlider.addEventListener('input', () => {
-        const speed = parseInt(speedSlider.value, 10);
-        speedValue.textContent = speed;
-        socket.emit("ball-control", { type: "speed", value: speed });
-      });
-
+      startBtn.addEventListener('click', () => { isBallMoving = true; socket.emit("ball-control", { type: "start" }); });
+      stopBtn.addEventListener('click', () => { isBallMoving = false; socket.emit("ball-control", { type: "stop" }); });
+      speedSlider.addEventListener('input', () => { const speed = parseInt(speedSlider.value, 10); speedValue.textContent = speed; socket.emit("ball-control", { type: "speed", value: speed }); });
       movePatternSelect.addEventListener('change', () => socket.emit("ball-control", { type: "movePattern", value: movePatternSelect.value }));
       audioToggle.addEventListener('change', () => socket.emit("ball-control", { type: "audioToggle", value: audioToggle.checked }));
       ballColorSelect.addEventListener('change', () => socket.emit("ball-control", { type: "ballColor", value: ballColorSelect.value }));
       bgColorSelect.addEventListener('change', () => socket.emit("ball-control", { type: "bgColor", value: bgColorSelect.value }));
-
-      // ▼▼▼ 修正: BGMの再生/停止ロジック ▼▼▼
+      
       musicToggleBtn.addEventListener('click', () => {
-        if (audioPlayer.paused) {
-          if (shuffledPlaylist.length === 0) {
-            // 初回再生
-            shuffledPlaylist = shufflePlaylist(musicPlaylist);
-            currentTrackIndex = 0;
-            // クライアントにプレイリストと開始を指示
-            socket.emit('music-start', { 
-              playlist: shuffledPlaylist, 
-              startIndex: currentTrackIndex,
-              volume: volumeSlider.value 
-            });
-            playSongAtIndex(currentTrackIndex);
-          } else {
-            // 一時停止からの再開
-            audioPlayer.play();
-            socket.emit('music-control', { type: 'resume' });
-          }
-          musicToggleBtn.textContent = '停止';
-        } else {
-          // 再生中 -> 一時停止
-          audioPlayer.pause();
-          socket.emit('music-control', { type: 'pause' });
-          musicToggleBtn.textContent = '再生';
-        }
+        if (audioPlayer.paused) { playNextSong(); } else { pauseMusic(); }
       });
       
       volumeSlider.addEventListener('input', () => {
-          audioPlayer.volume = volumeSlider.value;
-          socket.emit('music-control', { type: 'volume', value: volumeSlider.value });
+        audioPlayer.volume = volumeSlider.value;
+        socket.emit('music-volume', { value: audioPlayer.volume });
       });
       
-      // セラピスト側のプレーヤーが曲を終えたら、次の曲へ
+      // １曲終わったら、次の曲を再生し、クライアントにも指示を出す
       audioPlayer.addEventListener('ended', () => {
-          currentTrackIndex++;
-          // プレイリストの最後に到達したら、再度シャッフルして最初から
-          if (currentTrackIndex >= shuffledPlaylist.length) {
-            shuffledPlaylist = shufflePlaylist(musicPlaylist);
-            currentTrackIndex = 0;
-            // クライアントにも新しいプレイリストを送信
-            socket.emit('music-start', { playlist: shuffledPlaylist, startIndex: currentTrackIndex, volume: volumeSlider.value });
-          }
-          playSongAtIndex(currentTrackIndex);
+        currentTrackIndex++;
+        playNextSong();
       });
 
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          if (isBallMoving) stopBtn.click(); else startBtn.click();
-        }
-        if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
-          e.preventDefault();
-          speedSlider.value = Math.min(parseInt(speedSlider.value) + 1, 100);
-          speedSlider.dispatchEvent(new Event('input'));
-        }
-        if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
-          e.preventDefault();
-          speedSlider.value = Math.max(parseInt(speedSlider.value) - 1, 1);
-          speedSlider.dispatchEvent(new Event('input'));
-        }
-      });
-      
-      socket.on("ball-control", (data) => {
-        if (data.type === "ballColor") ballColorSelect.value = data.value;
-      });
-
+      document.addEventListener('keydown', (e) => { if (e.key === 'Enter') { if (isBallMoving) stopBtn.click(); else startBtn.click(); } if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { e.preventDefault(); speedSlider.value = Math.min(parseInt(speedSlider.value) + 1, 100); speedSlider.dispatchEvent(new Event('input')); } if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { e.preventDefault(); speedSlider.value = Math.max(parseInt(speedSlider.value) - 1, 1); speedSlider.dispatchEvent(new Event('input')); } });
+      socket.on("ball-control", (data) => { if (data.type === "ballColor") ballColorSelect.value = data.value; });
       setInterval(() => socket.emit('ping'), 30000);
-      socket.on('connect', () => console.log('サーバーに接続しました。 ID:', socket.id));
-      socket.on('disconnect', (reason) => console.log('サーバーから切断されました。理由:', reason));
-
-      // --- 初期化処理 ---
+      
+      // --- 初期化 ---
       const ballColors = [ "#FFFFFF", "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#8AB5E6", "#E68D8A", "#B5E68A", "#4E7199", "#99514E", "#4E9967", "#FF0000", "#000000" ];
       const bgColors = [ "#000000", "#282c34", "#36454F", "#5a5a5a", "#FFFFFF" ];
-      
-      function populateColorSelect(selectElem, colorList) {
-        colorList.forEach(color => {
-          const option = document.createElement("option");
-          option.value = color; option.textContent = `⬛ ${color}`;
-          option.style.backgroundColor = color;
-          option.style.color = getContrastYIQ(color) === "black" ? "#000" : "#fff";
-          selectElem.appendChild(option);
-        });
-      }
-      function getContrastYIQ(hexcolor) {
-        hexcolor = hexcolor.replace("#", "");
-        const r = parseInt(hexcolor.substr(0,2),16), g = parseInt(hexcolor.substr(2,2),16), b = parseInt(hexcolor.substr(4,2),16);
-        return ((r*299)+(g*587)+(b*114))/1000 >= 128 ? 'black' : 'white';
-      }
-      populateColorSelect(ballColorSelect, ballColors);
-      populateColorSelect(bgColorSelect, bgColors);
+      function populateColorSelect(selectElem,colorList){colorList.forEach(color=>{const option=document.createElement("option");option.value=color;option.textContent=`⬛ ${color}`;option.style.backgroundColor=color;option.style.color=getContrastYIQ(color)==="black"?"#000":"#fff";selectElem.appendChild(option)})}
+      function getContrastYIQ(hexcolor){hexcolor=hexcolor.replace("#","");const r=parseInt(hexcolor.substr(0,2),16),g=parseInt(hexcolor.substr(2,2),16),b=parseInt(hexcolor.substr(4,2),16);return((r*299)+(g*587)+(b*114))/1000>=128?'black':'white'}
+      populateColorSelect(ballColorSelect, ballColors); populateColorSelect(bgColorSelect, bgColors);
     });
   </script>
 </body>
