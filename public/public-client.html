@@ -4,22 +4,86 @@
   <meta charset="UTF-8" />
   <title>EMDR Client</title>
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; background-color: #000000; }
-    #setupScreen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: #f0f0f0; z-index: 20; display: flex; flex-direction: column; justify-content: center; align-items: center; transition: opacity 0.5s; }
-    #colorChooser { background-color: white; padding: 25px 35px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); text-align: center; }
-    #colorChooser label { font-size: 18px; color: #333; }
-    #colorChooser select { margin-top: 15px; padding: 8px; font-size: 16px; min-width: 180px; }
-    #startSessionBtn { margin-top: 30px; padding: 15px 40px; font-size: 18px; font-weight: bold; cursor: pointer; border-radius: 8px; border: none; background-color: #5c67f2; color: white; transition: background-color 0.2s; }
-    #startSessionBtn:hover { background-color: #4a54c2; }
-    #ball { width: 50px; height: 50px; border-radius: 50%; position: absolute; background-color: #FFFFFF; visibility: hidden; }
+    html, body { 
+      margin: 0; 
+      padding: 0; 
+      height: 100%; 
+      overflow: hidden; 
+      font-family: sans-serif; 
+      /* ▼ 変更: 背景色はJSで制御するため、ここでの指定は初期値のみ */
+      background-color: #f0f0f0;
+      transition: background-color 0.3s; /* 背景色変更を滑らかに */
+    }
+    #setupScreen {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      transition: opacity 0.5s;
+    }
+    #chooserWrapper {
+      background-color: white;
+      padding: 25px 35px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      text-align: center;
+      display: flex;
+      gap: 30px; /* 色選択を横並びに */
+    }
+    .color-selector label {
+      font-size: 18px;
+      color: #333;
+      display: block;
+    }
+    .color-selector select {
+      margin-top: 15px;
+      padding: 8px;
+      font-size: 16px;
+      min-width: 180px;
+    }
+    #startSessionBtn {
+      margin-top: 30px;
+      padding: 15px 40px;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      border-radius: 8px;
+      border: none;
+      background-color: #5c67f2;
+      color: white;
+      transition: background-color 0.2s;
+    }
+    #startSessionBtn:hover {
+      background-color: #4a54c2;
+    }
+    #ball { 
+      width: 50px; 
+      height: 50px; 
+      border-radius: 50%; 
+      position: absolute;
+      background-color: #FFFFFF;
+      /* ▼ 変更: 最初から表示しておく */
+      visibility: visible;
+    }
   </style>
 </head>
 <body>
 
+  <!-- ▼ 変更: 準備画面のUIを改善 -->
   <div id="setupScreen">
-    <div id="colorChooser">
-      <label for="clientBallColor">ボールの色を選んでください</label><br>
-      <select id="clientBallColor"></select>
+    <div id="chooserWrapper">
+      <div class="color-selector">
+        <label for="clientBallColor">ボールの色</label>
+        <select id="clientBallColor"></select>
+      </div>
+      <div class="color-selector">
+        <label for="clientBgColor">背景の色</label>
+        <select id="clientBgColor"></select>
+      </div>
     </div>
     <button id="startSessionBtn">セッションを開始</button>
   </div>
@@ -34,70 +98,61 @@
       const setupScreen = document.getElementById("setupScreen");
       const startSessionBtn = document.getElementById("startSessionBtn");
       const clientBallColorSelect = document.getElementById("clientBallColor");
+      const clientBgColorSelect = document.getElementById("clientBgColor"); // 背景色選択を追加
       let isSessionStarted = false;
 
-      // ▼▼▼ ご提示いただいたクライアント側ロジックを反映 ▼▼▼
+      // --- オーディオ関連 (変更なし) ---
       const audioPlayer = new Audio();
       audioPlayer.volume = 0.5;
-
-      socket.on('music-control', (data) => {
-        if (!isSessionStarted) return; // セッション開始前は無視
-        switch (data.type) {
-          case 'play':
-            console.log('再生指示を受信:', data.src);
-            // new URL() は複雑でエラーの元になるため、よりシンプルな比較に変更
-            if (!audioPlayer.src.endsWith(data.src)) {
-                audioPlayer.src = data.src;
-            }
-            audioPlayer.play().catch(e => console.error("クライアントでの再生に失敗:", e));
-            break;
-          case 'pause':
-            audioPlayer.pause();
-            break;
-          case 'volume':
-            audioPlayer.volume = data.value;
-            break;
-        }
-      });
-      // ▲▲▲ ここまでがご提示のロジック ▲▲▲
-
-      // --- 安定版のボールロジック ---
       let audioContext, panner, isAudioEnabled = false, isAudioInitialized = false;
-      const ballSize = { width: 50, height: 50 }; let position = { x: (window.innerWidth - ballSize.width) / 2, y: (window.innerHeight - ballSize.height) / 2 }; ball.style.left = position.x + "px"; ball.style.top = position.y + "px"; let direction = { x: 1, y: 0 }, speed = 5, animationId = null, movePattern = 'horizontal'; let isStopping = false, hasReachedEdge = false, stopProgress = 0; const stopDuration = 120; let returnStartPosition; const angle = 15, angleRad = angle * Math.PI / 180; const dirX = Math.cos(angleRad), dirY = Math.sin(angleRad); let panDirection = -1;
-      function initAudio() { if (isAudioInitialized) return; try { audioContext = new (window.AudioContext || window.webkitAudioContext)(); panner = audioContext.createStereoPanner(); panner.connect(audioContext.destination); isAudioInitialized = true; } catch (e) { console.error("Web Audio API is not supported."); } }
-      function playCollisionSound() { if (!isAudioEnabled || !isAudioInitialized) return; if (audioContext.state === 'suspended') audioContext.resume(); const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(440, audioContext.currentTime); oscillator.connect(gainNode).connect(panner); panner.pan.setValueAtTime(panDirection, audioContext.currentTime); gainNode.gain.setValueAtTime(0.5, audioContext.currentTime); gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.1); oscillator.start(audioContext.currentTime); oscillator.stop(audioContext.currentTime + 0.1); panDirection *= -1; }
-      function updateDirection() { switch (movePattern) { case 'horizontal': direction = { x: 1, y: 0 }; break; case 'diagonal1': direction = { x: dirX, y: dirY }; break; case 'diagonal2': direction = { x: -dirX, y: dirY }; break; } }
-      function stopBall() { if (animationId && !isStopping) { isStopping = true; hasReachedEdge = false; } }
-      function moveBall() { const screen = { width: window.innerWidth, height: window.innerHeight }; if (isStopping) { if (!hasReachedEdge) { position.x += direction.x * speed; position.y += direction.y * speed; if (position.x <= 0 || position.x + ballSize.width >= screen.width || position.y <= 0 || position.y + ballSize.height >= screen.height) { playCollisionSound(); hasReachedEdge = true; returnStartPosition = { ...position }; stopProgress = 0; } } else { const center = { x: (screen.width - ballSize.width) / 2, y: (screen.height - ballSize.height) / 2 }; stopProgress += 1 / stopDuration; const ease = 1 - Math.pow(1 - stopProgress, 3); position.x = returnStartPosition.x + (center.x - returnStartPosition.x) * ease; position.y = returnStartPosition.y + (center.y - returnStartPosition.y) * ease; if (stopProgress >= 1) { position = center; cancelAnimationFrame(animationId); animationId = null; isStopping = false; ball.style.left = position.x + "px"; ball.style.top = position.y + "px"; return; } } } else { position.x += direction.x * speed; position.y += direction.y * speed; if (movePattern === 'horizontal') { if (position.x <= 0 || position.x + ballSize.width >= screen.width) { direction.x *= -1; playCollisionSound(); } } else { if (position.x <= 0 || position.x + ballSize.width >= screen.width || position.y <= 0 || position.y + ballSize.height >= screen.height) { direction.x *= -1; direction.y *= -1; playCollisionSound(); } } } position.x = Math.max(0, Math.min(position.x, screen.width - ballSize.width)); position.y = Math.max(0, Math.min(position.y, screen.height - ballSize.height)); ball.style.left = position.x + "px"; ball.style.top = position.y + "px"; if (animationId) animationId = requestAnimationFrame(moveBall); }
+
+      // --- ボール関連 (変更なし) ---
+      const ballSize={width:50,height:50};let position={x:(window.innerWidth-ballSize.width)/2,y:(window.innerHeight-ballSize.height)/2};ball.style.left=position.x+"px";ball.style.top=position.y+"px";let direction={x:1,y:0},speed=5,animationId=null,movePattern='horizontal';let isStopping=false,hasReachedEdge=false,stopProgress=0;const stopDuration=120;let returnStartPosition;const angle=15,angleRad=angle*Math.PI/180;const dirX=Math.cos(angleRad),dirY=Math.sin(angleRad);let panDirection=-1;function initAudio(){if(isAudioInitialized)return;try{audioContext=new(window.AudioContext||window.webkitAudioContext)();panner=audioContext.createStereoPanner();panner.connect(audioContext.destination);isAudioInitialized=true}catch(e){console.error("Web Audio API is not supported.")}}function playCollisionSound(){if(!isAudioEnabled||!isAudioInitialized)return;if(audioContext.state==='suspended')audioContext.resume();const o=audioContext.createOscillator(),t=audioContext.createGain();o.type='sine';o.frequency.setValueAtTime(440,audioContext.currentTime);o.connect(t).connect(panner);panner.pan.setValueAtTime(panDirection,audioContext.currentTime);t.gain.setValueAtTime(.5,audioContext.currentTime);t.gain.exponentialRampToValueAtTime(1e-4,audioContext.currentTime+.1);o.start(audioContext.currentTime);o.stop(audioContext.currentTime+.1);panDirection*=-1}function updateDirection(){switch(movePattern){case'horizontal':direction={x:1,y:0};break;case'diagonal1':direction={x:dirX,y:dirY};break;case'diagonal2':direction={x:-dirX,y:dirY};break}}function stopBall(){if(animationId&&!isStopping){isStopping=true;hasReachedEdge=false}}function moveBall(){const e={width:window.innerWidth,height:window.innerHeight};if(isStopping){if(!hasReachedEdge){position.x+=direction.x*speed;position.y+=direction.y*speed;if(position.x<=0||position.x+ballSize.width>=e.width||position.y<=0||position.y+ballSize.height>=e.height){playCollisionSound();hasReachedEdge=true;returnStartPosition={...position};stopProgress=0}}else{const t={x:(e.width-ballSize.width)/2,y:(e.height-ballSize.height)/2};stopProgress+=1/stopDuration;const o=1-Math.pow(1-stopProgress,3);position.x=returnStartPosition.x+(t.x-returnStartPosition.x)*o;position.y=returnStartPosition.y+(t.y-returnStartPosition.y)*o;if(stopProgress>=1){position=t;cancelAnimationFrame(animationId);animationId=null;isStopping=false;ball.style.left=position.x+"px";ball.style.top=position.y+"px";return}}}else{position.x+=direction.x*speed;position.y+=direction.y*speed;if(movePattern==='horizontal'){if(position.x<=0||position.x+ballSize.width>=e.width){direction.x*=-1;playCollisionSound()}}else{if(position.x<=0||position.x+ballSize.width>=e.width||position.y<=0||position.y+ballSize.height>=e.height){direction.x*=-1;direction.y*=-1;playCollisionSound()}}}position.x=Math.max(0,Math.min(position.x,e.width-ballSize.width));position.y=Math.max(0,Math.min(position.y,e.height-ballSize.height));ball.style.left=position.x+"px";ball.style.top=position.y+"px";if(animationId)animationId=requestAnimationFrame(moveBall)}
+
+      // --- イベントリスナー ---
       
+      // ▼▼▼ 追加: 準備画面でのリアルタイムプレビュー機能 ▼▼▼
+      clientBallColorSelect.addEventListener('change', () => {
+        ball.style.backgroundColor = clientBallColorSelect.value;
+      });
+      clientBgColorSelect.addEventListener('change', () => {
+        document.body.style.backgroundColor = clientBgColorSelect.value;
+      });
+
       startSessionBtn.addEventListener("click", () => {
         isSessionStarted = true;
-        ball.style.visibility = 'visible';
-        const selectedColor = clientBallColorSelect.value;
-        ball.style.backgroundColor = selectedColor;
-        socket.emit("ball-control", { type: "ballColor", value: selectedColor });
+
+        // 最終的に選ばれた色をサーバーに通知
+        socket.emit("ball-control", { type: "ballColor", value: clientBallColorSelect.value });
+        socket.emit("ball-control", { type: "bgColor", value: clientBgColorSelect.value });
+        
         setupScreen.style.opacity = '0';
         setTimeout(() => { setupScreen.style.display = 'none'; }, 500);
         
-        // --- 衝突音とBGMの再生許可をユーザー操作時に取得 ---
         initAudio();
         if (audioContext && audioContext.state === 'suspended') { audioContext.resume(); }
-        audioPlayer.play().catch(()=>{}); // 許可を得るために一度再生を試み、すぐに止める
+        audioPlayer.play().catch(()=>{});
         audioPlayer.pause();
         console.log("オーディオの準備ができました。");
       });
 
-      socket.on("ball-control", (data) => { if (!isSessionStarted) return; switch (data.type) { case "start": isStopping=false; hasReachedEdge=false; if(!animationId){updateDirection();animationId=requestAnimationFrame(moveBall)} break; case "stop": stopBall(); break; case "audioToggle": isAudioEnabled=data.value; if(isAudioEnabled&&!isAudioInitialized)initAudio(); break; case "movePattern": movePattern=data.value; updateDirection(); break; case "speed": speed=data.value; break; case "ballColor": ball.style.backgroundColor=data.value; clientBallColorSelect.value=data.value; break; case "bgColor": document.body.style.backgroundColor=data.value; break; }});
+      // --- Socketリスナー (変更なし) ---
+      socket.on('music-control', (data) => { if (!isSessionStarted) return; switch (data.type) { case 'play': console.log('再生指示を受信:', data.src); if (!audioPlayer.src.endsWith(data.src)) { audioPlayer.src = data.src; } audioPlayer.play().catch(e => console.error("クライアントでの再生に失敗:", e)); break; case 'pause': audioPlayer.pause(); break; case 'volume': audioPlayer.volume = data.value; break; }});
+      socket.on("ball-control", (data) => { if (!isSessionStarted) return; switch (data.type) { case "start": isStopping=false; hasReachedEdge=false; if(!animationId){updateDirection();animationId=requestAnimationFrame(moveBall)} break; case "stop": stopBall(); break; case "audioToggle": isAudioEnabled=data.value; if(isAudioEnabled&&!isAudioInitialized)initAudio(); break; case "movePattern": movePattern=data.value; updateDirection(); break; case "speed": speed=data.value; break; case "ballColor": ball.style.backgroundColor=data.value; clientBallColorSelect.value=data.value; break; case "bgColor": document.body.style.backgroundColor=data.value; clientBgColorSelect.value = data.value; break; }});
       
       // --- 初期化 ---
       setInterval(() => socket.emit('ping'), 30000);
       socket.on('connect', () => console.log('サーバーに再接続しました。 ID:', socket.id));
       socket.on('disconnect', (reason) => console.log('サーバーから切断されました。理由:', reason));
       const ballColors = [ "#FFFFFF", "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#8AB5E6", "#E68D8A", "#B5E68A", "#4E7199", "#99514E", "#4E9967", "#FF0000", "#000000" ];
-      function populateColorSelect(selectElem,colorList){if(!selectElem)return;colorList.forEach(color=>{const option=document.createElement("option");option.value=color;option.textContent=`⬛ ${color}`;option.style.backgroundColor=color;option.style.color=getContrastYIQ(color)==="black"?"#000":"#fff";selectElem.appendChild(option)})}
+      const bgColors = [ "#000000", "#282c34", "#36454F", "#5a5a5a", "#FFFFFF" ];
+      function populateColorSelect(selectElem,colorList){colorList.forEach(color=>{const option=document.createElement("option");option.value=color;option.textContent=`⬛ ${color}`;option.style.backgroundColor=color;option.style.color=getContrastYIQ(color)==="black"?"#000":"#fff";selectElem.appendChild(option)})}
       function getContrastYIQ(hexcolor){hexcolor=hexcolor.replace("#","");const r=parseInt(hexcolor.substr(0,2),16),g=parseInt(hexcolor.substr(2,2),16),b=parseInt(hexcolor.substr(4,2),16);return((r*299)+(g*587)+(b*114))/1000>=128?'black':'white'}
       populateColorSelect(clientBallColorSelect, ballColors);
+      populateColorSelect(clientBgColorSelect, bgColors);
       clientBallColorSelect.value = "#FFFFFF"; 
+      clientBgColorSelect.value = "#000000";
+      document.body.style.backgroundColor = clientBgColorSelect.value; // 初期背景色を設定
       window.addEventListener("resize", () => { if(!animationId){position = {x:(window.innerWidth-ballSize.width)/2,y:(window.innerHeight-ballSize.height)/2};ball.style.left = position.x + 'px'; ball.style.top = position.y + 'px';}});
     });
   </script>
