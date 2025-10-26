@@ -11,204 +11,134 @@
     .control-group button, .control-group select, .control-group input { width: calc(100% - 20px); padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 15px; }
     .control-group button { background-color: #5c67f2; color: white; border: none; cursor: pointer; transition: background-color 0.2s; }
     .control-group button:hover { background-color: #4a54c2; }
-    /* ▼ 変更: 停止ボタン用のスタイルクラス */
     #toggleMoveBtn.stop-active { background-color: #f25c5c; }
     #toggleMoveBtn.stop-active:hover { background-color: #c24a4a; }
     .toggle-switch { display: flex; align-items: center; gap: 10px; }
     #volumeSlider { width: 120px; vertical-align: middle; }
     #musicToggleBtn { width: auto; padding: 10px 20px; }
-    
-    /* ▼▼▼ 追加: プレビュー画面用のスタイル ▼▼▼ */
-    #previewContainer {
-      max-width: 800px;
-      margin: 30px auto;
-      padding: 20px;
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    }
-    #previewContainer h3 {
-      text-align: center;
-      color: #555;
-      margin-top: 0;
-    }
-    #previewArea {
-      width: 100%;
-      height: 250px; /* プレビューの高さを設定 */
-      background-color: #000000;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      position: relative;
-      overflow: hidden;
-      transition: background-color 0.3s;
-    }
-    #previewBall {
-      width: 30px; /* プレビューボールは少し小さめに */
-      height: 30px;
-      border-radius: 50%;
-      background-color: #FFFFFF;
-      position: absolute;
-    }
-    /* ▲▲▲ ここまで追加 ▲▲▲ */
+    #previewContainer { max-width: 800px; margin: 30px auto; padding: 20px; background: #fff; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    #previewContainer h3 { text-align: center; color: #555; margin-top: 0; }
+    #previewArea { width: 100%; height: 250px; background-color: #000000; border: 1px solid #ccc; border-radius: 8px; position: relative; overflow: hidden; transition: background-color 0.3s; }
+    #previewBall { width: 30px; height: 30px; border-radius: 50%; background-color: #FFFFFF; position: absolute; }
   </style>
 </head>
 <body>
 
   <div id="controlPanel">
-    <div class="control-group">
-      <label>基本操作</label>
-      <!-- ▼ 変更: ボタンを一つに統合 -->
-      <button id="toggleMoveBtn">開始</button>
-    </div>
+    <div class="control-group"> <label>基本操作</label> <button id="toggleMoveBtn">開始</button> </div>
     <div class="control-group"> <label for="movePattern">動きのパターン</label> <select id="movePattern"> <option value="horizontal">水平</option> <option value="diagonal1">斜め（＼）</option> <option value="diagonal2">斜め（／）</option> </select> </div>
     <div class="control-group"> <label for="speedSlider">速さ: <span id="speedValue">5</span></label> <input type="range" id="speedSlider" min="1" max="100" value="5" /> </div>
     <div class="control-group"> <label>ボールと背景の色</label> <select id="ballColor"></select> <select id="bgColor"></select> </div>
     <div class="control-group"> <label>サウンド</label> <div class="toggle-switch"> <span>衝突音</span> <input type="checkbox" id="audioToggle" /> </div> </div>
     <div class="control-group"> <label>BGM操作</label> <div> <button id="musicToggleBtn">再生</button> <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.7" title="音量"> </div> </div>
   </div>
-
-  <!-- ▼▼▼ 追加: プレビュー画面のHTML ▼▼▼ -->
-  <div id="previewContainer">
-    <h3>クライアント画面プレビュー</h3>
-    <div id="previewArea">
-      <div id="previewBall"></div>
-    </div>
-  </div>
+  <div id="previewContainer"> <h3>クライアント画面プレビュー</h3> <div id="previewArea"> <div id="previewBall"></div> </div> </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const socket = io();
-
-      // --- DOM要素 ---
-      const toggleMoveBtn = document.getElementById('toggleMoveBtn'); // 統合ボタン
-      const speedSlider = document.getElementById('speedSlider');
-      const speedValue = document.getElementById('speedValue');
-      const movePatternSelect = document.getElementById('movePattern');
-      const audioToggle = document.getElementById('audioToggle');
-      const ballColorSelect = document.getElementById('ballColor');
-      const bgColorSelect = document.getElementById('bgColor');
-      const musicToggleBtn = document.getElementById('musicToggleBtn');
-      const volumeSlider = document.getElementById('volumeSlider');
+      const toggleMoveBtn = document.getElementById('toggleMoveBtn'), speedSlider = document.getElementById('speedSlider'), speedValue = document.getElementById('speedValue'), movePatternSelect = document.getElementById('movePattern'), audioToggle = document.getElementById('audioToggle'), ballColorSelect = document.getElementById('ballColor'), bgColorSelect = document.getElementById('bgColor'), musicToggleBtn = document.getElementById('musicToggleBtn'), volumeSlider = document.getElementById('volumeSlider');
+      const previewArea = document.getElementById('previewArea'), previewBall = document.getElementById('previewBall');
+      let isBallMoving = false;
+      const audioPlayer=new Audio();const musicPlaylist=['/audio/1 Blue Berry Pufffin.mp3','/audio/2 A Step In The River.mp3','/audio/3 Peak\'s Performance.mp3','/audio/4 Jazz Hoyt.mp3','/audio/5 Pop\'s Trilogy.mp3','/audio/6 Redemption.mp3','/audio/7 Oceanic Fellings.mp3','/audio/8 Paco Bell.mp3','/audio/9 Round The Lake.mp3','/audio/10 Piano R Squared.mp3','/audio/11 New (No) Frills - Shaken, Not Stirred.mp3'];let shuffledPlaylist=[],currentTrackIndex=0;function shufflePlaylist(e){const t=[...e];for(let o=t.length-1;o>0;o--){const l=Math.floor(Math.random()*(o+1));[t[o],t[l]]=[t[l],t[o]]}return t}function playMusic(){if(shuffledPlaylist.length===0){shuffledPlaylist=shufflePlaylist(musicPlaylist);currentTrackIndex=0}const e=shuffledPlaylist[currentTrackIndex];audioPlayer.src=e;audioPlayer.play();musicToggleBtn.textContent='停止';socket.emit('music-control',{type:'play',src:e})}function pauseMusic(){audioPlayer.pause();musicToggleBtn.textContent='再生';socket.emit('music-control',{type:'pause'})}musicToggleBtn.addEventListener('click',()=>{if(audioPlayer.paused){playMusic()}else{pauseMusic()}});volumeSlider.addEventListener('input',()=>{const e=Math.pow(volumeSlider.value,2);audioPlayer.volume=e;socket.emit('music-control',{type:'volume',value:e})});audioPlayer.addEventListener('ended',()=>{currentTrackIndex++;if(currentTrackIndex>=shuffledPlaylist.length){shuffledPlaylist=shufflePlaylist(musicPlaylist);currentTrackIndex=0}playMusic()});
       
-      // プレビュー用DOM要素
-      const previewArea = document.getElementById('previewArea');
-      const previewBall = document.getElementById('previewBall');
-
-      // --- 状態管理 ---
-      let isBallMoving = false; // ボールの動作状態
-
-      // --- BGMロジック (変更なし、安定版) ---
-      const audioPlayer=new Audio();const musicPlaylist=['/audio/1 Blue Berry Pufffin.mp3','/audio/2 A Step In The River.mp3','/audio/3 Peak\'s Performance.mp3','/audio/4 Jazz Hoyt.mp3','/audio/5 Pop\'s Trilogy.mp3','/audio/6 Redemption.mp3','/audio/7 Oceanic Fellings.mp3','/audio/8 Paco Bell.mp3','/audio/9 Round The Lake.mp3','/audio/10 Piano R Squared.mp3','/audio/11 New (No) Frills - Shaken, Not Stirred.mp3'];let shuffledPlaylist=[],currentTrackIndex=0;function shufflePlaylist(e){const t=[...e];for(let o=t.length-1;o>0;o--){const l=Math.floor(Math.random()*(o+1));[t[o],t[l]]=[t[l],t[o]]}return t}function playMusic(){if(shuffledPlaylist.length===0){shuffledPlaylist=shufflePlaylist(musicPlaylist);currentTrackIndex=0}const e=shuffledPlaylist[currentTrackIndex];audioPlayer.src=e;audioPlayer.play();musicToggleBtn.textContent='停止';socket.emit('music-control',{type:'play',src:e})}function pauseMusic(){audioPlayer.pause();musicToggleBtn.textContent='再生';socket.emit('music-control',{type:'pause'})}musicToggleBtn.addEventListener('click',()=>{if(audioPlayer.paused){playMusic()}else{pauseMusic()}});audioPlayer.addEventListener('ended',()=>{currentTrackIndex++;if(currentTrackIndex>=shuffledPlaylist.length){shuffledPlaylist=shufflePlaylist(musicPlaylist);currentTrackIndex=0}playMusic()});
-
-      // ▼▼▼ 変更: 音量スライダーの処理 ▼▼▼
-      volumeSlider.addEventListener('input', () => {
-          // スライダーの値を2乗することで、小さい音量域での変化を緩やかにする
-          const volume = Math.pow(volumeSlider.value, 2); 
-          audioPlayer.volume = volume;
-          socket.emit('music-control', { type: 'volume', value: volume });
-      });
-
-      // ▼▼▼ 追加: プレビューボールの動作ロジック ▼▼▼
-      const previewBallSize = { width: 30, height: 30 };
-      let previewPosition, previewDirection, previewAnimationId = null;
-      const angle = 15, angleRad = angle * Math.PI / 180;
-      const dirX = Math.cos(angleRad), dirY = Math.sin(angleRad);
+      // ▼▼▼ 修正点②,③: プレビューボールの動作ロジックをクライアントと完全に同期 ▼▼▼
+      const previewBallSize={width:30,height:30};let previewPosition,previewDirection,previewAnimationId=null;const angle=15,angleRad=angle*Math.PI/180,dirX=Math.cos(angleRad),dirY=Math.sin(angleRad);
+      let isPreviewStopping=false,hasPreviewReachedEdge=false,previewStopProgress=0;const previewStopDuration=120;let previewReturnStartPosition;
       
-      function resetPreviewBallPosition() {
-        const areaRect = previewArea.getBoundingClientRect();
-        previewPosition = { 
-          x: (areaRect.width - previewBallSize.width) / 2, 
-          y: (areaRect.height - previewBallSize.height) / 2 
-        };
-        previewBall.style.left = previewPosition.x + 'px';
-        previewBall.style.top = previewPosition.y + 'px';
-      }
+      function resetPreviewBallPosition(){if(previewAnimationId)cancelAnimationFrame(previewAnimationId);previewAnimationId=null;const e=previewArea.getBoundingClientRect();previewPosition={x:(e.width-previewBallSize.width)/2,y:(e.height-previewBallSize.height)/2};previewBall.style.left=previewPosition.x+'px';previewBall.style.top=previewPosition.y+'px'}
+      function updatePreviewDirection(){const e=movePatternSelect.value;switch(e){case'horizontal':previewDirection={x:1,y:0};break;case'diagonal1':previewDirection={x:dirX,y:dirY};break;case'diagonal2':previewDirection={x:-dirX,y:dirY};break}}
+      function stopPreviewBall(){if(previewAnimationId&&!isPreviewStopping){isPreviewStopping=true;hasPreviewReachedEdge=false}}
       
-      function updatePreviewDirection() {
-        const pattern = movePatternSelect.value;
-        switch (pattern) {
-          case 'horizontal': previewDirection = { x: 1, y: 0 }; break;
-          case 'diagonal1': previewDirection = { x: dirX, y: dirY }; break;
-          case 'diagonal2': previewDirection = { x: -dirX, y: dirY }; break;
-        }
-      }
-
       function movePreviewBall() {
-        const speed = parseInt(speedSlider.value, 10) / 4; // プレビューは少し遅めに
-        const areaRect = previewArea.getBoundingClientRect();
-        previewPosition.x += previewDirection.x * speed;
-        previewPosition.y += previewDirection.y * speed;
-        if (movePatternSelect.value === 'horizontal') {
-          if (previewPosition.x <= 0 || previewPosition.x + previewBallSize.width >= areaRect.width) {
-            previewDirection.x *= -1;
+          const speed = parseInt(speedSlider.value, 10);
+          const areaRect = previewArea.getBoundingClientRect();
+
+          if (isPreviewStopping) {
+              if (!hasPreviewReachedEdge) {
+                  previewPosition.x += previewDirection.x * speed;
+                  previewPosition.y += previewDirection.y * speed;
+                  if (previewPosition.x <= 0 || previewPosition.x + previewBallSize.width >= areaRect.width || previewPosition.y <= 0 || previewPosition.y + previewBallSize.height >= areaRect.height) {
+                      hasPreviewReachedEdge = true;
+                      previewReturnStartPosition = { ...previewPosition };
+                      previewStopProgress = 0;
+                  }
+              } else {
+                  const center = { x: (areaRect.width - previewBallSize.width) / 2, y: (areaRect.height - previewBallSize.height) / 2 };
+                  previewStopProgress += 1 / previewStopDuration;
+                  const ease = 1 - Math.pow(1 - previewStopProgress, 3);
+                  previewPosition.x = previewReturnStartPosition.x + (center.x - previewReturnStartPosition.x) * ease;
+                  previewPosition.y = previewReturnStartPosition.y + (center.y - previewReturnStartPosition.y) * ease;
+                  if (previewStopProgress >= 1) {
+                      resetPreviewBallPosition();
+                      isPreviewStopping = false;
+                      return; // アニメーションループを停止
+                  }
+              }
+          } else {
+              previewPosition.x += previewDirection.x * speed;
+              previewPosition.y += previewDirection.y * speed;
+              if (movePatternSelect.value === 'horizontal') {
+                  if (previewPosition.x <= 0 || previewPosition.x + previewBallSize.width >= areaRect.width) previewDirection.x *= -1;
+              } else {
+                  if (previewPosition.x <= 0 || previewPosition.x + previewBallSize.width >= areaRect.width) previewDirection.x *= -1;
+                  if (previewPosition.y <= 0 || previewPosition.y + previewBallSize.height >= areaRect.height) previewDirection.y *= -1;
+              }
           }
-        } else {
-          if (previewPosition.x <= 0 || previewPosition.x + previewBallSize.width >= areaRect.width) {
-            previewDirection.x *= -1;
-          }
-          if (previewPosition.y <= 0 || previewPosition.y + previewBallSize.height >= areaRect.height) {
-            previewDirection.y *= -1;
-          }
-        }
-        previewPosition.x = Math.max(0, Math.min(previewPosition.x, areaRect.width - previewBallSize.width));
-        previewPosition.y = Math.max(0, Math.min(previewPosition.y, areaRect.height - previewBallSize.height));
-        previewBall.style.left = previewPosition.x + 'px';
-        previewBall.style.top = previewPosition.y + 'px';
-        previewAnimationId = requestAnimationFrame(movePreviewBall);
+          previewPosition.x=Math.max(0,Math.min(previewPosition.x,areaRect.width-previewBallSize.width));previewPosition.y=Math.max(0,Math.min(previewPosition.y,areaRect.height-previewBallSize.height));previewBall.style.left=previewPosition.x+'px';previewBall.style.top=previewPosition.y+'px';
+          previewAnimationId=requestAnimationFrame(movePreviewBall);
       }
       
-      // --- イベントリスナー ---
-      
-      // ▼ 変更: 開始・停止トグルボタンの処理
       toggleMoveBtn.addEventListener('click', () => {
-        isBallMoving = !isBallMoving;
-        if (isBallMoving) {
-          socket.emit("ball-control", { type: "start" });
-          toggleMoveBtn.textContent = '停止';
-          toggleMoveBtn.classList.add('stop-active');
-          // プレビュー開始
-          updatePreviewDirection();
-          if (!previewAnimationId) previewAnimationId = requestAnimationFrame(movePreviewBall);
-        } else {
-          socket.emit("ball-control", { type: "stop" });
-          toggleMoveBtn.textContent = '開始';
-          toggleMoveBtn.classList.remove('stop-active');
-          // プレビュー停止
-          cancelAnimationFrame(previewAnimationId);
-          previewAnimationId = null;
+          isBallMoving = !isBallMoving;
+          if (isBallMoving) {
+              socket.emit("ball-control", { type: "start" });
+              toggleMoveBtn.textContent = '停止';
+              toggleMoveBtn.classList.add('stop-active');
+              isPreviewStopping = false; hasPreviewReachedEdge = false;
+              updatePreviewDirection();
+              if (!previewAnimationId) previewAnimationId = requestAnimationFrame(movePreviewBall);
+          } else {
+              socket.emit("ball-control", { type: "stop" });
+              toggleMoveBtn.textContent = '開始';
+              toggleMoveBtn.classList.remove('stop-active');
+              stopPreviewBall();
+          }
+      });
+      
+      speedSlider.addEventListener('input',()=>{const e=parseInt(speedSlider.value,10);speedValue.textContent=e;socket.emit("ball-control",{type:"speed",value:e})});
+      movePatternSelect.addEventListener('change',()=>{socket.emit("ball-control",{type:"movePattern",value:movePatternSelect.value});updatePreviewDirection()});
+      audioToggle.addEventListener('change',()=>socket.emit("ball-control",{type:"audioToggle",value:audioToggle.checked}));
+      ballColorSelect.addEventListener('change',()=>{socket.emit("ball-control",{type:"ballColor",value:ballColorSelect.value});previewBall.style.backgroundColor=ballColorSelect.value});
+      bgColorSelect.addEventListener('change',()=>{socket.emit("ball-control",{type:"bgColor",value:bgColorSelect.value});previewArea.style.backgroundColor=bgColorSelect.value});
+      
+      // ▼▼▼ 修正点③: キーボードショートカットの再設定 ▼▼▼
+      document.addEventListener('keydown', (e) => {
+        // Enterキーで開始/停止をトグル
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            toggleMoveBtn.click();
+        }
+        // →キーで加速
+        if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            speedSlider.value = Math.min(parseInt(speedSlider.value) + 1, 100);
+            speedSlider.dispatchEvent(new Event('input'));
+        }
+        // ←キーで減速
+        if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            speedSlider.value = Math.max(parseInt(speedSlider.value) - 1, 1);
+            speedSlider.dispatchEvent(new Event('input'));
         }
       });
       
-      speedSlider.addEventListener('input', () => { const speed = parseInt(speedSlider.value, 10); speedValue.textContent = speed; socket.emit("ball-control", { type: "speed", value: speed }); });
-      movePatternSelect.addEventListener('change', () => { socket.emit("ball-control", { type: "movePattern", value: movePatternSelect.value }); updatePreviewDirection(); });
-      audioToggle.addEventListener('change', () => socket.emit("ball-control", { type: "audioToggle", value: audioToggle.checked }));
-      ballColorSelect.addEventListener('change', () => { socket.emit("ball-control", { type: "ballColor", value: ballColorSelect.value }); previewBall.style.backgroundColor = ballColorSelect.value; });
-      bgColorSelect.addEventListener('change', () => { socket.emit("ball-control", { type: "bgColor", value: bgColorSelect.value }); previewArea.style.backgroundColor = bgColorSelect.value; });
-      
-      // --- Socketリスナー ---
-      socket.on("ball-control", (data) => {
-        // クライアントからの色変更をUIに反映
-        if (data.type === "ballColor") {
-          ballColorSelect.value = data.value;
-          previewBall.style.backgroundColor = data.value;
-        }
-        if (data.type === "bgColor") {
-          bgColorSelect.value = data.value;
-          previewArea.style.backgroundColor = data.value;
-        }
-      });
-      
-      // --- 初期化 ---
-      setInterval(() => socket.emit('ping'), 30000);
-      socket.on('connect', () => console.log('サーバーに接続しました。 ID:', socket.id));
-      socket.on('disconnect', (reason) => console.log('サーバーから切断されました。理由:', reason));
-      const ballColors = [ "#FFFFFF", "#FFE3CB", "#FFB3BF", "#F5CEE6", "#C5E8F2", "#C3D4F3", "#BCE0DF", "#DFF5D6", "#FFFAD1", "#8AB5E6", "#E68D8A", "#B5E68A", "#4E7199", "#99514E", "#4E9967", "#FF0000", "#000000" ];
-      const bgColors = [ "#000000", "#282c34", "#36454F", "#5a5a5a", "#FFFFFF" ];
-      function populateColorSelect(selectElem,colorList){colorList.forEach(color=>{const option=document.createElement("option");option.value=color;option.textContent=`⬛ ${color}`;option.style.backgroundColor=color;option.style.color=getContrastYIQ(color)==="black"?"#000":"#fff";selectElem.appendChild(option)})}
-      function getContrastYIQ(hexcolor){hexcolor=hexcolor.replace("#","");const r=parseInt(hexcolor.substr(0,2),16),g=parseInt(hexcolor.substr(2,2),16),b=parseInt(hexcolor.substr(4,2),16);return((r*299)+(g*587)+(b*114))/1000>=128?'black':'white'}
-      populateColorSelect(ballColorSelect, ballColors); populateColorSelect(bgColorSelect, bgColors);
-      resetPreviewBallPosition(); // プレビューボールを中央に配置
+      socket.on("ball-control",(e)=>{if(e.type==="ballColor"){ballColorSelect.value=e.value;previewBall.style.backgroundColor=e.value}if(e.type==="bgColor"){bgColorSelect.value=e.value;previewArea.style.backgroundColor=e.value}});
+      setInterval(()=>socket.emit('ping'),30000);
+      socket.on('connect',()=>console.log('サーバーに接続しました。 ID:',socket.id));
+      socket.on('disconnect',(e)=>console.log('サーバーから切断されました。理由:',e));
+      const ballColors=["#FFFFFF","#FFE3CB","#FFB3BF","#F5CEE6","#C5E8F2","#C3D4F3","#BCE0DF","#DFF5D6","#FFFAD1","#8AB5E6","#E68D8A","#B5E68A","#4E7199","#99514E","#4E9967","#FF0000","#000000"],bgColors=["#000000","#282c34","#36454F","#5a5a5a","#FFFFFF"];function populateColorSelect(e,t){t.forEach(o=>{const l=document.createElement("option");l.value=o;l.textContent=`⬛ ${o}`;l.style.backgroundColor=o;l.style.color=getContrastYIQ(o)==="black"?"#000":"#fff";e.appendChild(l)})}function getContrastYIQ(e){e=e.replace("#","");const t=parseInt(e.substr(0,2),16),o=parseInt(e.substr(2,2),16),l=parseInt(e.substr(4,2),16);return(t*299+o*587+l*114)/1e3>=128?"black":"white"}populateColorSelect(ballColorSelect,ballColors);populateColorSelect(bgColorSelect,bgColors);resetPreviewBallPosition();
     });
   </script>
 </body>
