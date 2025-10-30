@@ -1,1 +1,53 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Vibration Client (Left)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #000; color: #fff; font-family: sans-serif; text-align: center; }
+    #message { font-size: 24px; }
+    #readyBtn { padding: 20px 40px; font-size: 20px; cursor: pointer; border-radius: 10px; background-color: #5c67f2; color: white; border: none; }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <h1 id="title">左手用</h1>
+    <p id="message">下のボタンを押して準備完了</p>
+    <button id="readyBtn">準備OK</button>
+  </div>
 
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const readyBtn = document.getElementById('readyBtn');
+      const message = document.getElementById('message');
+      const title = document.getElementById('title');
+      const container = document.getElementById('container');
+      
+      readyBtn.addEventListener('click', () => {
+        // ユーザー操作をトリガーに振動APIの許可を得る
+        navigator.vibrate(10); // 短い振動でテスト
+
+        const socket = io();
+
+        socket.on('connect', () => {
+          console.log('サーバーに接続しました (Left)');
+          container.innerHTML = '<h1>左手用</h1><p>準備完了です。セラピストの指示をお待ちください。</p>';
+        });
+
+        // 左手用の振動指示を待つ
+        socket.on('vibrate-left', () => {
+          navigator.vibrate(200); // 200ミリ秒振動
+        });
+        
+        socket.on('disconnect', () => {
+          console.log('サーバーから切断されました (Left)');
+          container.innerHTML = '<h1>左手用</h1><p style="color: red;">サーバーとの接続が切れました。ページを再読み込みしてください。</p>';
+        });
+
+      }, { once: true }); // ボタンは一度だけ押せるようにする
+    });
+  </script>
+</body>
+</html>
